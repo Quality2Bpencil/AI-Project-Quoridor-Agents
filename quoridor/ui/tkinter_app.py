@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from quoridor import MoveAction, QuoridorEnv, WallAction
+from quoridor.agents import RandomAgent
 from quoridor.core.actions import Action
 
 
@@ -22,6 +23,8 @@ class QuoridorTkApp:
         canvas_size = self.board_px + self.margin * 2
 
         self.mode = tk.StringVar(value="move")
+        self.player_types = (tk.StringVar(value="Human"), tk.StringVar(value="Human"))
+        self.random_agents = (RandomAgent(seed=0), RandomAgent(seed=1))
         self.status = tk.StringVar()
 
         toolbar = tk.Frame(self.root)
@@ -31,6 +34,13 @@ class QuoridorTkApp:
         tk.Radiobutton(toolbar, text="Horizontal wall", variable=self.mode, value="H", command=self.draw).pack(side=tk.LEFT)
         tk.Radiobutton(toolbar, text="Vertical wall", variable=self.mode, value="V", command=self.draw).pack(side=tk.LEFT)
         tk.Button(toolbar, text="Reset", command=self.reset).pack(side=tk.RIGHT)
+
+        players = tk.Frame(self.root)
+        players.pack(fill=tk.X, padx=10, pady=(6, 0))
+        tk.Label(players, text="Player 0").pack(side=tk.LEFT)
+        tk.OptionMenu(players, self.player_types[0], "Human", "Random", command=lambda _: self.maybe_auto_play()).pack(side=tk.LEFT)
+        tk.Label(players, text="Player 1").pack(side=tk.LEFT, padx=(12, 0))
+        tk.OptionMenu(players, self.player_types[1], "Human", "Random", command=lambda _: self.maybe_auto_play()).pack(side=tk.LEFT)
 
         self.canvas = tk.Canvas(self.root, width=canvas_size, height=canvas_size, bg="#f3ead7", highlightthickness=0)
         self.canvas.pack(padx=10, pady=10)
@@ -47,6 +57,7 @@ class QuoridorTkApp:
         self.env.reset()
         self.mode.set("move")
         self.draw()
+        self.maybe_auto_play()
 
     def draw(self) -> None:
         self.canvas.delete("all")
@@ -102,6 +113,8 @@ class QuoridorTkApp:
     def handle_click(self, event: tk.Event) -> None:
         if self.env.state.done:
             return
+        if self.current_player_type() != "Human":
+            return
 
         action = self.action_from_click(event.x, event.y)
         if action is None:
@@ -113,6 +126,26 @@ class QuoridorTkApp:
             messagebox.showinfo("Illegal action", "That action is not legal.")
             return
         self.draw()
+        self.maybe_auto_play()
+
+    def current_player_type(self) -> str:
+        return self.player_types[self.env.state.current_player].get()
+
+    def maybe_auto_play(self) -> None:
+        if self.env.state.done or self.current_player_type() != "Random":
+            self.draw()
+            return
+        self.root.after(150, self.play_random_turn)
+
+    def play_random_turn(self) -> None:
+        if self.env.state.done or self.current_player_type() != "Random":
+            self.draw()
+            return
+        player = self.env.state.current_player
+        action = self.random_agents[player].choose_action(self.env.state, self.env.legal_actions())
+        self.env.step(action)
+        self.draw()
+        self.maybe_auto_play()
 
     def action_from_click(self, x: int, y: int) -> Action | None:
         mode = self.mode.get()
