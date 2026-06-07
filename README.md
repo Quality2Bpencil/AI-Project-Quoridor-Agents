@@ -40,7 +40,6 @@ AI_Project/
     test_training_env.py
   visual.py               # 启动图形界面
   train_interface_demo.py # 训练接口示例
-  main.py                 # ASCII demo
 ```
 
 ## 图形界面
