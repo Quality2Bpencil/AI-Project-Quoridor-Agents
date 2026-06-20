@@ -1,7 +1,13 @@
 import unittest
 
 from quoridor import MoveAction, QuoridorEnv, QuoridorState, WallAction
-from quoridor.core.rules import has_path_to_goal, legal_pawn_moves, legal_wall_action, shortest_path_length
+from quoridor.core.rules import (
+    has_path_to_goal,
+    is_legal_action,
+    legal_pawn_moves,
+    legal_wall_action,
+    shortest_path_length,
+)
 
 
 def move_targets(state):
@@ -25,6 +31,14 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(result.state.pawn_positions[0], (7, 4))
         self.assertEqual(result.state.current_player, 1)
         self.assertEqual(result.reward, (0, 0))
+
+    def test_single_action_legality_check(self):
+        env = QuoridorEnv()
+
+        self.assertTrue(is_legal_action(env.state, MoveAction((7, 4))))
+        self.assertTrue(is_legal_action(env.state, WallAction("H", 1, 4)))
+        self.assertFalse(is_legal_action(env.state, MoveAction((6, 4))))
+        self.assertFalse(is_legal_action(env.state, WallAction("H", 8, 0)))
 
 
     def test_wall_blocks_movement_between_two_cells(self):

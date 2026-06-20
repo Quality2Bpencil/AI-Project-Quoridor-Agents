@@ -181,10 +181,20 @@ def legal_actions(state: QuoridorState, player: int | None = None) -> list[Actio
     return [*legal_pawn_moves(state, player), *legal_wall_actions(state, player)]
 
 
+def is_legal_action(state: QuoridorState, action: Action, player: int | None = None) -> bool:
+    """Return whether a single action is legal without enumerating all walls."""
+
+    if isinstance(action, MoveAction):
+        return action in legal_pawn_moves(state, player)
+    if isinstance(action, WallAction):
+        return legal_wall_action(state, action, player)
+    return False
+
+
 def apply_action(state: QuoridorState, action: Action) -> QuoridorState:
     """Apply a legal action and return the next immutable state."""
 
-    if action not in legal_actions(state):
+    if not is_legal_action(state, action):
         raise ValueError(f"illegal action for player {state.current_player}: {action}")
 
     player = state.current_player

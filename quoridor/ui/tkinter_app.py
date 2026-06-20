@@ -25,6 +25,7 @@ class QuoridorTkApp:
         self.mode = tk.StringVar(value="move")
         self.player_types = (tk.StringVar(value="Human"), tk.StringVar(value="Human"))
         self.random_agents = (RandomAgent(seed=0), RandomAgent(seed=1))
+        self.auto_play_job: str | None = None
         self.status = tk.StringVar()
 
         toolbar = tk.Frame(self.root)
@@ -54,6 +55,7 @@ class QuoridorTkApp:
         self.root.mainloop()
 
     def reset(self) -> None:
+        self.cancel_auto_play()
         self.env.reset()
         self.mode.set("move")
         self.draw()
@@ -133,11 +135,14 @@ class QuoridorTkApp:
 
     def maybe_auto_play(self) -> None:
         if self.env.state.done or self.current_player_type() != "Random":
+            self.cancel_auto_play()
             self.draw()
             return
-        self.root.after(150, self.play_random_turn)
+        if self.auto_play_job is None:
+            self.auto_play_job = self.root.after(150, self.play_random_turn)
 
     def play_random_turn(self) -> None:
+        self.auto_play_job = None
         if self.env.state.done or self.current_player_type() != "Random":
             self.draw()
             return
@@ -146,6 +151,15 @@ class QuoridorTkApp:
         self.env.step(action)
         self.draw()
         self.maybe_auto_play()
+
+    def cancel_auto_play(self) -> None:
+        if self.auto_play_job is None:
+            return
+        try:
+            self.root.after_cancel(self.auto_play_job)
+        except tk.TclError:
+            pass
+        self.auto_play_job = None
 
     def action_from_click(self, x: int, y: int) -> Action | None:
         mode = self.mode.get()
