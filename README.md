@@ -7,6 +7,9 @@
 - Quoridor 核心规则引擎
 - Tkinter 图形界面
 - RandomAgent 示例
+- Greedy BFS / Minimax / MCTS baseline agents
+- PathLure adversarial agent
+- Tournament / Elo evaluation framework
 - 固定离散动作空间的训练接口
 - 单元测试
 
@@ -30,13 +33,26 @@ AI_Project/
     agents/
       base.py             # Agent 接口示例
       random_agent.py     # RandomAgent 示例
+      greedy_bfs.py       # 最短路贪心 baseline
+      minimax.py          # Alpha-beta minimax baseline
+      mcts.py             # UCT MCTS baseline
+      adversarial.py      # PathLure adversarial agent
+      heuristics.py       # 搜索 agent 共享启发式
+    evaluation/
+      metrics.py          # 单局对战和结果记录
+      tournament.py       # Round-robin tournament
+      elo.py              # Elo 更新工具
     training/
       discrete_env.py     # 训练用固定动作空间接口
     ui/
       tkinter_app.py      # Tkinter 可视化界面
+  experiments/
+    run_tournament.py     # 小规模 tournament 命令行入口
   tests/
     test_rules.py
     test_random_agent.py
+    test_search_agents.py
+    test_evaluation.py
     test_training_env.py
   visual.py               # 启动图形界面
   train_interface_demo.py # 训练接口示例
@@ -111,6 +127,58 @@ agent = RandomAgent(seed=0)
 
 action = agent.choose_action(env.state, env.legal_actions())
 env.step(action)
+```
+
+当前已经内置几个 Project baseline：
+
+```python
+from quoridor.agents import GreedyBFSAgent, MCTSAgent, MinimaxAgent, PathLureAgent
+
+greedy = GreedyBFSAgent(seed=0)
+minimax = MinimaxAgent(depth=2, action_limit=24, wall_limit=16)
+mcts = MCTSAgent(iterations=100, rollout_depth=24)
+path_lure = PathLureAgent(seed=0)
+```
+
+这些 agent 都只依赖标准 `choose_action(state, legal_actions)` 接口。搜索类 agent 默认会先用启发式筛选候选墙位，再用完整规则引擎验证合法性，避免在实验中反复枚举全棋盘墙位导致运行过慢。
+
+## 对战评估
+
+运行一个轻量 smoke tournament：
+
+```powershell
+python experiments\run_tournament.py --preset smoke --games-per-pair 1 --max-turns 20 --output tmp\tournament_smoke.csv
+```
+
+运行包含当前所有已实现 agent 的轻量完整 preset：
+
+```powershell
+python experiments\run_tournament.py --preset full --games-per-pair 2 --max-turns 150 --output experiments\results\tournament_games.csv
+```
+
+运行更重的 research preset：
+
+```powershell
+python experiments\run_tournament.py --preset research --games-per-pair 2 --max-turns 150 --output experiments\results\tournament_research.csv
+```
+
+代码接口：
+
+```python
+from quoridor.agents import GreedyBFSAgent, RandomAgent
+from quoridor.evaluation import AgentSpec, run_round_robin
+
+result = run_round_robin(
+    [
+        AgentSpec("random", lambda: RandomAgent(seed=0)),
+        AgentSpec("greedy", lambda: GreedyBFSAgent(seed=1)),
+    ],
+    games_per_pair=2,
+    max_turns=100,
+)
+
+print(result.standings())
+result.write_games_csv("tmp/games.csv")
 ```
 
 ## 训练接口
@@ -208,6 +276,8 @@ python -m unittest discover -s tests -v
 - 墙重叠/交叉检测
 - 不能完全封死路径
 - RandomAgent
+- Greedy BFS / Minimax / MCTS / PathLure 返回合法动作
+- 单局对战、round-robin tournament 和 Elo 更新
 - 训练接口动作编码和合法动作 mask
 
 ## 交接说明
@@ -215,6 +285,9 @@ python -m unittest discover -s tests -v
 核心规则都在 `quoridor/core/`。一般情况下，后续同学不需要改规则引擎，只需要：
 
 - 写自己的 agent：参考 `quoridor/agents/random_agent.py`
+- 写搜索 baseline：参考 `quoridor/agents/greedy_bfs.py`、`quoridor/agents/minimax.py`、`quoridor/agents/mcts.py`
+- 写 adversarial policy：参考 `quoridor/agents/adversarial.py`
+- 跑实验：参考 `experiments/run_tournament.py`
 - 接训练代码：参考 `quoridor/training/discrete_env.py`
 - 调试界面：运行 `python visual.py`
 - 验证改动：运行 `python -m unittest discover -s tests -v`
