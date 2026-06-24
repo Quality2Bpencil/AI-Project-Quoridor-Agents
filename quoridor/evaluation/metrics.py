@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from quoridor.core.actions import Action
+from quoridor.agents.heuristics import path_distance, path_diversity
+from quoridor.core.actions import Action, MoveAction, WallAction
 from quoridor.core.env import QuoridorEnv
 
 
@@ -18,6 +19,13 @@ class GameRecord:
     max_turns_reached: bool
     disqualified_player: int | None = None
     remaining_walls: tuple[int, int] = (10, 10)
+    initial_path_lengths: tuple[int, int] = (8, 8)
+    final_path_lengths: tuple[int, int] = (8, 8)
+    final_path_diversity: tuple[int, int] = (1, 1)
+    min_path_diversity: tuple[int, int] = (1, 1)
+    move_actions: tuple[int, int] = (0, 0)
+    wall_actions: tuple[int, int] = (0, 0)
+    trap_events: tuple[int, int] = (0, 0)
     actions: tuple[str, ...] = field(default_factory=tuple)
 
     @property
@@ -46,6 +54,11 @@ def play_game(
     agents = (agent0, agent1)
     action_log: list[str] = []
     disqualified: int | None = None
+    initial_paths = _path_lengths(env)
+    min_diversity = list(_path_diversities(env))
+    move_counts = [0, 0]
+    wall_counts = [0, 0]
+    trap_counts = [0, 0]
 
     while not env.state.done and env.state.turn_count < max_turns:
         player = env.state.current_player
@@ -56,6 +69,11 @@ def play_game(
                 disqualified = player
                 break
             env.step(action)
+            if isinstance(action, MoveAction):
+                move_counts[player] += 1
+            elif isinstance(action, WallAction):
+                wall_counts[player] += 1
+            _update_trap_metrics(env, player, initial_paths, min_diversity, trap_counts)
             if record_actions:
                 action_log.append(repr(action))
         except Exception:
@@ -74,6 +92,13 @@ def play_game(
         max_turns_reached=(winner is None and env.state.turn_count >= max_turns),
         disqualified_player=disqualified,
         remaining_walls=env.state.remaining_walls,
+        initial_path_lengths=initial_paths,
+        final_path_lengths=_path_lengths(env),
+        final_path_diversity=_path_diversities(env),
+        min_path_diversity=(min_diversity[0], min_diversity[1]),
+        move_actions=(move_counts[0], move_counts[1]),
+        wall_actions=(wall_counts[0], wall_counts[1]),
+        trap_events=(trap_counts[0], trap_counts[1]),
         actions=tuple(action_log),
     )
 
@@ -83,3 +108,28 @@ def _choose_action(agent: object, state: object, legal_actions: Sequence[Action]
     if choose_action is None:
         raise TypeError(f"{agent!r} does not implement choose_action")
     return choose_action(state, legal_actions)
+
+
+def _path_lengths(env: QuoridorEnv) -> tuple[int, int]:
+    return path_distance(env.state, 0), path_distance(env.state, 1)
+
+
+def _path_diversities(env: QuoridorEnv) -> tuple[int, int]:
+    return path_diversity(env.state, 0), path_diversity(env.state, 1)
+
+
+def _update_trap_metrics(
+    env: QuoridorEnv,
+    acting_player: int,
+    initial_paths: tuple[int, int],
+    min_diversity: list[int],
+    trap_counts: list[int],
+) -> None:
+    current_diversity = list(_path_diversities(env))
+    min_diversity[0] = min(min_diversity[0], current_diversity[0])
+    min_diversity[1] = min(min_diversity[1], current_diversity[1])
+
+    opponent = 1 - acting_player
+    current_paths = _path_lengths(env)
+    if current_diversity[opponent] <= 1 and current_paths[opponent] >= initial_paths[opponent] + 1:
+        trap_counts[acting_player] += 1

@@ -162,6 +162,12 @@ python experiments\run_tournament.py --preset full --games-per-pair 2 --max-turn
 python experiments\run_tournament.py --preset research --games-per-pair 2 --max-turns 150 --output experiments\results\tournament_research.csv
 ```
 
+运行 PathLure 的 trap-weight ablation：
+
+```powershell
+python experiments\run_ablation.py --weights 0,4,8 --games 4 --max-turns 80 --output experiments\results\path_lure_ablation.csv
+```
+
 代码接口：
 
 ```python
@@ -180,6 +186,8 @@ result = run_round_robin(
 print(result.standings())
 result.write_games_csv("tmp/games.csv")
 ```
+
+CSV 会记录胜负、回合数、剩余墙数、起止最短路、最终/最小 path diversity、移动/放墙次数，以及 `trap_events`。`trap_events` 是一个实验 proxy：当行动方让对手的最短路选择数降到 `1` 或以下，同时对手最短路至少比开局长 `1` 步时计数。
 
 ## 训练接口
 

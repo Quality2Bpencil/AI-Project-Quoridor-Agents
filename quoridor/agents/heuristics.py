@@ -27,7 +27,8 @@ def action_sort_key(action: Action) -> tuple[str, int, int, str]:
 
 
 def path_distance(state: QuoridorState, player: int) -> int:
-    return shortest_path_length(state, player) or UNREACHABLE_DISTANCE
+    distance = shortest_path_length(state, player)
+    return UNREACHABLE_DISTANCE if distance is None else distance
 
 
 def evaluate_state(state: QuoridorState, player: int) -> float:

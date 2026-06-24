@@ -64,7 +64,9 @@ def main() -> None:
         print(
             f"{row['agent']:12s} games={row['games']:3d} "
             f"wins={row['wins']:3d} draws={row['draws']:3d} "
-            f"win_rate={row['win_rate']:.2f} elo={row['elo']:.1f}"
+            f"win_rate={row['win_rate']:.2f} elo={row['elo']:.1f} "
+            f"trap={row['avg_trap_events']:.2f} walls={row['avg_wall_actions']:.2f} "
+            f"path_delta={row['avg_path_delta']:.2f}"
         )
     print(f"wrote {args.output}")
 

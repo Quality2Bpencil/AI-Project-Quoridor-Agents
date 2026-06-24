@@ -24,7 +24,17 @@ class TournamentResult:
     def standings(self) -> list[dict[str, float | int | str]]:
         names = sorted({record.agent0 for record in self.records} | {record.agent1 for record in self.records})
         stats = {
-            name: {"agent": name, "games": 0, "wins": 0, "losses": 0, "draws": 0, "elo": 1000.0}
+            name: {
+                "agent": name,
+                "games": 0,
+                "wins": 0,
+                "losses": 0,
+                "draws": 0,
+                "elo": 1000.0,
+                "trap_events": 0,
+                "wall_actions": 0,
+                "path_delta": 0,
+            }
             for name in names
         }
 
@@ -33,6 +43,12 @@ class TournamentResult:
             b = stats[record.agent1]
             a["games"] += 1
             b["games"] += 1
+            a["trap_events"] += record.trap_events[0]
+            b["trap_events"] += record.trap_events[1]
+            a["wall_actions"] += record.wall_actions[0]
+            b["wall_actions"] += record.wall_actions[1]
+            a["path_delta"] += record.final_path_lengths[0] - record.initial_path_lengths[0]
+            b["path_delta"] += record.final_path_lengths[1] - record.initial_path_lengths[1]
 
             if record.winner is None:
                 a["draws"] += 1
@@ -53,6 +69,9 @@ class TournamentResult:
         for row in rows:
             games = int(row["games"])
             row["win_rate"] = 0.0 if games == 0 else float(row["wins"]) / games
+            row["avg_trap_events"] = 0.0 if games == 0 else round(float(row["trap_events"]) / games, 3)
+            row["avg_wall_actions"] = 0.0 if games == 0 else round(float(row["wall_actions"]) / games, 3)
+            row["avg_path_delta"] = 0.0 if games == 0 else round(float(row["path_delta"]) / games, 3)
             row["elo"] = round(float(row["elo"]), 1)
         return sorted(rows, key=lambda row: (float(row["elo"]), float(row["win_rate"]), str(row["agent"])), reverse=True)
 
@@ -72,6 +91,22 @@ class TournamentResult:
                     "disqualified_player",
                     "remaining_walls_0",
                     "remaining_walls_1",
+                    "initial_path_0",
+                    "initial_path_1",
+                    "final_path_0",
+                    "final_path_1",
+                    "final_path_delta_0",
+                    "final_path_delta_1",
+                    "final_diversity_0",
+                    "final_diversity_1",
+                    "min_diversity_0",
+                    "min_diversity_1",
+                    "move_actions_0",
+                    "move_actions_1",
+                    "wall_actions_0",
+                    "wall_actions_1",
+                    "trap_events_0",
+                    "trap_events_1",
                 ],
             )
             writer.writeheader()
@@ -87,6 +122,22 @@ class TournamentResult:
                         "disqualified_player": record.disqualified_player,
                         "remaining_walls_0": record.remaining_walls[0],
                         "remaining_walls_1": record.remaining_walls[1],
+                        "initial_path_0": record.initial_path_lengths[0],
+                        "initial_path_1": record.initial_path_lengths[1],
+                        "final_path_0": record.final_path_lengths[0],
+                        "final_path_1": record.final_path_lengths[1],
+                        "final_path_delta_0": record.final_path_lengths[0] - record.initial_path_lengths[0],
+                        "final_path_delta_1": record.final_path_lengths[1] - record.initial_path_lengths[1],
+                        "final_diversity_0": record.final_path_diversity[0],
+                        "final_diversity_1": record.final_path_diversity[1],
+                        "min_diversity_0": record.min_path_diversity[0],
+                        "min_diversity_1": record.min_path_diversity[1],
+                        "move_actions_0": record.move_actions[0],
+                        "move_actions_1": record.move_actions[1],
+                        "wall_actions_0": record.wall_actions[0],
+                        "wall_actions_1": record.wall_actions[1],
+                        "trap_events_0": record.trap_events[0],
+                        "trap_events_1": record.trap_events[1],
                     }
                 )
 

@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from experiments.run_ablation import summarize_rows
 from quoridor.agents import GreedyBFSAgent, RandomAgent
 from quoridor.evaluation import AgentSpec, play_game, run_round_robin, update_elo
 
@@ -20,6 +21,9 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(record.agent1, "greedy")
         self.assertLessEqual(record.turns, 20)
         self.assertIn(record.winner, {0, 1, None})
+        self.assertEqual(len(record.final_path_lengths), 2)
+        self.assertEqual(len(record.min_path_diversity), 2)
+        self.assertEqual(sum(record.move_actions) + sum(record.wall_actions), record.turns)
 
     def test_update_elo_moves_winner_up(self):
         winner, loser = update_elo(1000, 1000, 1.0)
@@ -45,7 +49,35 @@ class EvaluationTests(unittest.TestCase):
             path = Path(tmpdir) / "games.csv"
             result.write_games_csv(path)
             self.assertTrue(path.exists())
-            self.assertIn("winner_name", path.read_text(encoding="utf-8"))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("winner_name", text)
+            self.assertIn("trap_events_0", text)
+            self.assertIn("final_path_delta_1", text)
+
+    def test_ablation_summary_rows(self):
+        rows = [
+            {
+                "condition": "path_lure_weight_0",
+                "adversary_won": True,
+                "trap_events": 2,
+                "opponent_min_diversity": 1,
+                "opponent_path_delta": 3,
+            },
+            {
+                "condition": "path_lure_weight_0",
+                "adversary_won": False,
+                "trap_events": 0,
+                "opponent_min_diversity": 2,
+                "opponent_path_delta": 1,
+            },
+        ]
+
+        summary = summarize_rows(rows)
+
+        self.assertEqual(summary[0]["condition"], "path_lure_weight_0")
+        self.assertEqual(summary[0]["games"], 2)
+        self.assertEqual(summary[0]["adversary_win_rate"], 0.5)
+        self.assertEqual(summary[0]["avg_trap_events"], 1.0)
 
 
 if __name__ == "__main__":

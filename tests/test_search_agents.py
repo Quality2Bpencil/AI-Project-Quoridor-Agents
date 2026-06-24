@@ -2,6 +2,8 @@ import unittest
 
 from quoridor import QuoridorEnv
 from quoridor.agents import GreedyBFSAgent, MCTSAgent, MinimaxAgent, PathLureAgent
+from quoridor.agents.heuristics import path_distance
+from quoridor.core.state import QuoridorState
 
 
 class SearchAgentTests(unittest.TestCase):
@@ -30,6 +32,11 @@ class SearchAgentTests(unittest.TestCase):
         self.assert_agent_returns_legal_action(
             PathLureAgent(seed=0, action_limit=6, wall_limit=3, victim_action_limit=6)
         )
+
+    def test_path_distance_allows_zero_at_goal(self):
+        state = QuoridorState(pawn_positions=((0, 4), (8, 4)), winner=0)
+
+        self.assertEqual(path_distance(state, 0), 0)
 
 
 if __name__ == "__main__":
