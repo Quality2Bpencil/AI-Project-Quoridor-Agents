@@ -1,7 +1,14 @@
 import unittest
 
 from quoridor import QuoridorEnv
-from quoridor.agents import GreedyBFSAgent, MCTSAgent, MinimaxAgent, PathLureAgent
+from quoridor.agents import (
+    DepthTrapAgent,
+    GreedyBFSAgent,
+    MCTSAgent,
+    MinimaxAgent,
+    PathLureAgent,
+    RolloutPoisonAgent,
+)
 from quoridor.agents.heuristics import path_distance
 from quoridor.core.state import QuoridorState
 
@@ -31,6 +38,16 @@ class SearchAgentTests(unittest.TestCase):
     def test_path_lure_returns_legal_action(self):
         self.assert_agent_returns_legal_action(
             PathLureAgent(seed=0, action_limit=6, wall_limit=3, victim_action_limit=6)
+        )
+
+    def test_depth_trap_returns_legal_action(self):
+        self.assert_agent_returns_legal_action(
+            DepthTrapAgent(seed=0, action_limit=6, wall_limit=3, victim_action_limit=4, followup_limit=4)
+        )
+
+    def test_rollout_poison_returns_legal_action(self):
+        self.assert_agent_returns_legal_action(
+            RolloutPoisonAgent(seed=0, action_limit=4, wall_limit=2, victim_action_limit=3, rollout_depth=1)
         )
 
     def test_path_distance_allows_zero_at_goal(self):

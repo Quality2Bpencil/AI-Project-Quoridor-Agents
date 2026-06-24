@@ -8,7 +8,7 @@
 - Tkinter 图形界面
 - RandomAgent 示例
 - Greedy BFS / Minimax / MCTS baseline agents
-- PathLure adversarial agent
+- PathLure / DepthTrap / RolloutPoison adversarial agents
 - Tournament / Elo evaluation framework
 - 固定离散动作空间的训练接口
 - 单元测试
@@ -36,7 +36,7 @@ AI_Project/
       greedy_bfs.py       # 最短路贪心 baseline
       minimax.py          # Alpha-beta minimax baseline
       mcts.py             # UCT MCTS baseline
-      adversarial.py      # PathLure adversarial agent
+      adversarial.py      # PathLure / DepthTrap / RolloutPoison adversarial agents
       heuristics.py       # 搜索 agent 共享启发式
     evaluation/
       metrics.py          # 单局对战和结果记录
@@ -132,15 +132,21 @@ env.step(action)
 当前已经内置几个 Project baseline：
 
 ```python
-from quoridor.agents import GreedyBFSAgent, MCTSAgent, MinimaxAgent, PathLureAgent
+from quoridor.agents import DepthTrapAgent, GreedyBFSAgent, MCTSAgent, MinimaxAgent, PathLureAgent, RolloutPoisonAgent
 
 greedy = GreedyBFSAgent(seed=0)
 minimax = MinimaxAgent(depth=2, action_limit=24, wall_limit=16)
 mcts = MCTSAgent(iterations=100, rollout_depth=24)
 path_lure = PathLureAgent(seed=0)
+depth_trap = DepthTrapAgent(seed=0)
+rollout_poison = RolloutPoisonAgent(seed=0)
 ```
 
 这些 agent 都只依赖标准 `choose_action(state, legal_actions)` 接口。搜索类 agent 默认会先用启发式筛选候选墙位，再用完整规则引擎验证合法性，避免在实验中反复枚举全棋盘墙位导致运行过慢。
+
+- `PathLureAgent`：针对 Greedy BFS，奖励让对手 path diversity 下降的动作。
+- `DepthTrapAgent`：针对 depth-limited Minimax，奖励对手浅层响应后我方仍有强 follow-up 的动作。
+- `RolloutPoisonAgent`：针对有限预算 MCTS，奖励对手浅 rollout 下响应分数接近、难以区分的局面。
 
 ## 对战评估
 
@@ -154,6 +160,12 @@ python experiments\run_tournament.py --preset smoke --games-per-pair 1 --max-tur
 
 ```powershell
 python experiments\run_tournament.py --preset full --games-per-pair 2 --max-turns 150 --output experiments\results\tournament_games.csv
+```
+
+运行 adversarial preset：
+
+```powershell
+python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --max-turns 80 --output experiments\results\tournament_adversarial.csv
 ```
 
 运行更重的 research preset：
@@ -284,7 +296,7 @@ python -m unittest discover -s tests -v
 - 墙重叠/交叉检测
 - 不能完全封死路径
 - RandomAgent
-- Greedy BFS / Minimax / MCTS / PathLure 返回合法动作
+- Greedy BFS / Minimax / MCTS / PathLure / DepthTrap / RolloutPoison 返回合法动作
 - 单局对战、round-robin tournament 和 Elo 更新
 - 训练接口动作编码和合法动作 mask
 

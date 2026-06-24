@@ -10,7 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from quoridor.agents import GreedyBFSAgent, MCTSAgent, MinimaxAgent, PathLureAgent, RandomAgent
+from quoridor.agents import (
+    DepthTrapAgent,
+    GreedyBFSAgent,
+    MCTSAgent,
+    MinimaxAgent,
+    PathLureAgent,
+    RandomAgent,
+    RolloutPoisonAgent,
+)
 from quoridor.evaluation import AgentSpec, run_round_robin
 
 
@@ -37,8 +45,33 @@ def build_specs(preset: str) -> list[AgentSpec]:
             ),
         ]
 
+    if preset == "adversarial":
+        return [
+            AgentSpec("greedy_bfs", lambda: GreedyBFSAgent(seed=1, action_limit=16, wall_limit=8)),
+            AgentSpec("minimax_d1", lambda: MinimaxAgent(depth=1, action_limit=8, wall_limit=4, seed=2)),
+            AgentSpec("mcts_5", lambda: MCTSAgent(iterations=5, rollout_depth=4, action_limit=6, wall_limit=3, seed=3)),
+            AgentSpec(
+                "path_lure",
+                lambda: PathLureAgent(seed=4, action_limit=4, wall_limit=2, victim_action_limit=4),
+            ),
+            AgentSpec(
+                "depth_trap",
+                lambda: DepthTrapAgent(seed=5, action_limit=4, wall_limit=2, victim_action_limit=4, followup_limit=4),
+            ),
+            AgentSpec(
+                "rollout_poison",
+                lambda: RolloutPoisonAgent(
+                    seed=6,
+                    action_limit=4,
+                    wall_limit=2,
+                    victim_action_limit=3,
+                    rollout_depth=1,
+                ),
+            ),
+        ]
+
     if preset != "research":
-        raise ValueError("preset must be 'smoke', 'full', or 'research'")
+        raise ValueError("preset must be 'smoke', 'full', 'adversarial', or 'research'")
 
     return [
         AgentSpec("random", lambda: RandomAgent(seed=0)),
@@ -46,12 +79,14 @@ def build_specs(preset: str) -> list[AgentSpec]:
         AgentSpec("minimax_d1", lambda: MinimaxAgent(depth=1, action_limit=12, wall_limit=8, seed=2)),
         AgentSpec("mcts_30", lambda: MCTSAgent(iterations=30, rollout_depth=10, action_limit=12, wall_limit=8, seed=3)),
         AgentSpec("path_lure", lambda: PathLureAgent(seed=4)),
+        AgentSpec("depth_trap", lambda: DepthTrapAgent(seed=5)),
+        AgentSpec("rollout_poison", lambda: RolloutPoisonAgent(seed=6)),
     ]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--preset", choices=["smoke", "full", "research"], default="smoke")
+    parser.add_argument("--preset", choices=["smoke", "full", "adversarial", "research"], default="smoke")
     parser.add_argument("--games-per-pair", type=int, default=1)
     parser.add_argument("--max-turns", type=int, default=100)
     parser.add_argument("--output", type=Path, default=Path("experiments/results/tournament_games.csv"))
