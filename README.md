@@ -6,6 +6,7 @@
 
 - Quoridor 核心规则引擎
 - Tkinter 图形界面
+- Web 图形界面，支持 Human / Agent 任意组合对弈
 - RandomAgent 示例
 - Greedy BFS / Minimax / MCTS baseline agents
 - PathLure / DepthTrap / RolloutPoison adversarial agents
@@ -46,6 +47,9 @@ AI_Project/
       discrete_env.py     # 训练用固定动作空间接口
     ui/
       tkinter_app.py      # Tkinter 可视化界面
+    web/
+      server.py           # 标准库 Web UI server
+      static/             # Web 棋盘、控制台和动效
   experiments/
     run_tournament.py     # 小规模 tournament 命令行入口
   tests/
@@ -55,10 +59,39 @@ AI_Project/
     test_evaluation.py
     test_training_env.py
   visual.py               # 启动图形界面
+  visual_web.py           # 启动 Web 图形界面
   train_interface_demo.py # 训练接口示例
 ```
 
-## 图形界面
+## Web 图形界面
+
+推荐使用 Web UI 做调试和报告展示：
+
+```powershell
+python visual_web.py
+```
+
+默认地址：
+
+```text
+http://127.0.0.1:8765
+```
+
+Web UI 支持：
+
+- Human vs Human
+- PVE：Human vs Random / Greedy BFS / Minimax / MCTS / PathLure / DepthTrap / RolloutPoison
+- Agent vs Agent：任意两个内置 agent 自动对弈
+- `Step` 单步执行当前 agent
+- `Play/Pause` 自动播放 agent 回合
+- `Reset` 重开
+- `Move / Horizontal wall / Vertical wall` 人类操作模式
+- 合法走法/墙位提示
+- 最短路径、path diversity、剩余墙数、回合数和 action log
+
+Web UI 只依赖 Python 标准库；前端会尝试从 CDN 加载 GSAP 做落子和放墙动效，加载失败时仍然可以使用。
+
+## Tkinter 图形界面
 
 运行：
 

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quoridor Agent Console</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="stage" aria-label="Quoridor board">
+        <header class="topbar">
+          <div>
+            <h1>Quoridor Agent Console</h1>
+            <p>Run human, search, and adversarial policies on the same board.</p>
+          </div>
+          <div class="match-status" id="matchStatus">Ready</div>
+        </header>
+
+        <div class="board-wrap">
+          <div class="board-frame">
+            <div class="board-grid" id="boardGrid" aria-label="Interactive Quoridor board"></div>
+          </div>
+          <div class="axis axis-top" id="axisTop"></div>
+          <div class="axis axis-left" id="axisLeft"></div>
+        </div>
+
+        <div class="timeline" aria-label="Move timeline">
+          <div class="timeline-head">
+            <span>Move stream</span>
+            <span id="lastAction">No moves yet</span>
+          </div>
+          <div class="timeline-track" id="timelineTrack"></div>
+        </div>
+      </section>
+
+      <aside class="console" aria-label="Game controls">
+        <section class="console-section players">
+          <div class="section-title">Players</div>
+          <label>
+            <span>Player 0</span>
+            <select id="player0"></select>
+          </label>
+          <label>
+            <span>Player 1</span>
+            <select id="player1"></select>
+          </label>
+        </section>
+
+        <section class="console-section controls">
+          <div class="section-title">Control</div>
+          <div class="button-row">
+            <button id="stepButton" class="icon-button" title="Step current agent">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l9-7-9-7Z" /><path d="M18 5v14" /></svg>
+              Step
+            </button>
+            <button id="playButton" class="icon-button primary" title="Play or pause agent turns">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7-11-7Z" /></svg>
+              Play
+            </button>
+            <button id="resetButton" class="icon-button" title="Reset game">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.05-4.95" /><path d="M5 5v5h5" /></svg>
+              Reset
+            </button>
+          </div>
+          <label class="range">
+            <span>Speed</span>
+            <input id="speedSlider" type="range" min="80" max="1200" step="40" value="420" />
+          </label>
+          <div class="mode-tabs" role="tablist" aria-label="Human action mode">
+            <button class="mode active" data-mode="move">Move</button>
+            <button class="mode" data-mode="H">Horizontal wall</button>
+            <button class="mode" data-mode="V">Vertical wall</button>
+          </div>
+        </section>
+
+        <section class="console-section metrics">
+          <div class="section-title">Metrics</div>
+          <div class="metric-grid">
+            <div><span>Turn</span><strong id="turnMetric">0</strong></div>
+            <div><span>Current</span><strong id="currentMetric">P0</strong></div>
+            <div><span>P0 path</span><strong id="p0Path">8</strong></div>
+            <div><span>P1 path</span><strong id="p1Path">8</strong></div>
+            <div><span>P0 diversity</span><strong id="p0Diversity">1</strong></div>
+            <div><span>P1 diversity</span><strong id="p1Diversity">1</strong></div>
+            <div><span>P0 walls</span><strong id="p0Walls">10</strong></div>
+            <div><span>P1 walls</span><strong id="p1Walls">10</strong></div>
+          </div>
+        </section>
+
+        <section class="console-section log">
+          <div class="section-title">Log</div>
+          <ol id="actionLog"></ol>
+        </section>
+      </aside>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
