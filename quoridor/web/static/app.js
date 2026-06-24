@@ -27,6 +27,10 @@ const els = {
   play: document.getElementById("playButton"),
   reset: document.getElementById("resetButton"),
   speed: document.getElementById("speedSlider"),
+  togglePaths: document.getElementById("togglePaths"),
+  toggleLegal: document.getElementById("toggleLegal"),
+  toggleCoords: document.getElementById("toggleCoords"),
+  toggleWalls: document.getElementById("toggleWalls"),
 };
 
 const hasGsap = () => window.gsap && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -95,6 +99,7 @@ function render(data) {
   const previous = state.data;
   state.data = data;
 
+  syncLayerVisibility();
   syncSelects(data);
   clearBoardClasses();
   renderPaths(data);
@@ -116,7 +121,6 @@ function syncSelects(data) {
 function clearBoardClasses() {
   els.board.querySelectorAll(".cell").forEach((node) => {
     node.classList.remove("legal", "path-p0", "path-p1");
-    node.querySelector(".pawn")?.remove();
   });
   els.board.querySelectorAll(".wall-slot").forEach((node) => {
     node.classList.remove("legal", "placed");
@@ -132,7 +136,7 @@ function renderPaths(data) {
 }
 
 function renderLegalHints(data) {
-  if (data.done || data.playerTypes[data.currentPlayer] !== "Human") return;
+  if (!els.toggleLegal.checked || data.done || data.playerTypes[data.currentPlayer] !== "Human") return;
   if (state.mode === "move") {
     data.legalMoves.forEach(([row, col]) => cellAt(row, col)?.classList.add("legal"));
     return;
@@ -143,6 +147,7 @@ function renderLegalHints(data) {
 }
 
 function renderWalls(data, previous) {
+  if (!els.toggleWalls.checked) return;
   const oldWalls = new Set((previous?.walls || []).map(wallKey));
   data.walls.forEach((wall) => {
     const slot = wallAt(wall.orientation, wall.row, wall.col);
@@ -157,8 +162,13 @@ function renderWalls(data, previous) {
 function renderPawns(data, previous) {
   data.pawns.forEach(([row, col], player) => {
     const cell = cellAt(row, col);
-    const pawn = els.board.querySelector(`.pawn.p${player}`);
-    if (!cell || !pawn) return;
+    let pawn = els.board.querySelector(`.pawn.p${player}`);
+    if (!pawn) {
+      pawn = document.createElement("div");
+      pawn.className = `pawn p${player}`;
+      pawn.dataset.player = String(player);
+    }
+    if (!cell) return;
     cell.appendChild(pawn);
     const old = previous?.pawns?.[player];
     if (hasGsap() && (!old || old[0] !== row || old[1] !== col)) {
@@ -280,6 +290,19 @@ function bindControls() {
       render(state.data);
     });
   });
+  [els.togglePaths, els.toggleLegal, els.toggleCoords, els.toggleWalls].forEach((input) => {
+    input.addEventListener("change", () => {
+      if (state.data) render(state.data);
+      else syncLayerVisibility();
+    });
+  });
+}
+
+function syncLayerVisibility() {
+  document.body.classList.toggle("hide-paths", !els.togglePaths.checked);
+  document.body.classList.toggle("hide-legal", !els.toggleLegal.checked);
+  document.body.classList.toggle("hide-coords", !els.toggleCoords.checked);
+  document.body.classList.toggle("hide-walls", !els.toggleWalls.checked);
 }
 
 async function updatePlayers() {
@@ -291,8 +314,8 @@ async function updatePlayers() {
 
 function setPlayButton() {
   els.play.innerHTML = state.playing
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7z" /><path d="M13 5h4v14h-4z" /></svg>Pause'
-    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7-11-7Z" /></svg>Play';
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M7 5h4v14H7z" /><path class="fill" d="M13 5h4v14h-4z" /></svg>Pause'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M8 5v14l11-7-11-7Z" /></svg>Play';
 }
 
 async function init() {

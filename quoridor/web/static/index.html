@@ -3,16 +3,62 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quoridor Agent Console</title>
+    <title>Quoridor AI Battle Visualizer</title>
     <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
     <main class="app-shell">
+      <aside class="side-rail" aria-label="Visualizer layers">
+        <div class="brand-lockup">
+          <div class="brand-cube" aria-hidden="true">Q</div>
+          <div>
+            <strong>Quoridor Lab</strong>
+            <span>Agent runtime</span>
+          </div>
+        </div>
+
+        <div class="rail-stack" aria-label="Workspace sections">
+          <div class="rail-item active"><span class="rail-glyph grid" aria-hidden="true"></span>Board</div>
+          <div class="rail-item"><span class="rail-glyph bars" aria-hidden="true"></span>Analysis</div>
+          <div class="rail-item"><span class="rail-glyph bot" aria-hidden="true"></span>Agents</div>
+          <div class="rail-item"><span class="rail-glyph sliders" aria-hidden="true"></span>Config</div>
+        </div>
+
+        <div class="layer-card">
+          <div class="rail-heading">Display layers</div>
+          <label class="layer-row">
+            <input id="togglePaths" type="checkbox" checked />
+            <span class="layer-check on" aria-hidden="true"></span>
+            Shortest paths
+          </label>
+          <label class="layer-row">
+            <input id="toggleLegal" type="checkbox" checked />
+            <span class="layer-check on" aria-hidden="true"></span>
+            Valid moves
+          </label>
+          <label class="layer-row">
+            <input id="toggleCoords" type="checkbox" checked />
+            <span class="layer-check on" aria-hidden="true"></span>
+            Coordinates
+          </label>
+          <label class="layer-row">
+            <input id="toggleWalls" type="checkbox" checked />
+            <span class="layer-check wall" aria-hidden="true"></span>
+            Walls
+          </label>
+        </div>
+
+        <div class="rail-footer">
+          <span>Local match</span>
+          <strong>Connected</strong>
+        </div>
+      </aside>
+
       <section class="stage" aria-label="Quoridor board">
         <header class="topbar">
           <div>
-            <h1>Quoridor Agent Console</h1>
-            <p>Run human, search, and adversarial policies on the same board.</p>
+            <h1>Quoridor AI Battle Visualizer</h1>
+            <p>Inspect moves, walls, shortest paths, and policy behavior on one live board.</p>
           </div>
           <div class="match-status" id="matchStatus">Ready</div>
         </header>
@@ -37,12 +83,12 @@
       <aside class="console" aria-label="Game controls">
         <section class="console-section players">
           <div class="section-title">Players</div>
-          <label>
-            <span>Player 0</span>
+          <label class="player-card player-card-p0">
+            <span><i aria-hidden="true"></i>Player 0</span>
             <select id="player0"></select>
           </label>
-          <label>
-            <span>Player 1</span>
+          <label class="player-card player-card-p1">
+            <span><i aria-hidden="true"></i>Player 1</span>
             <select id="player1"></select>
           </label>
         </section>
@@ -51,11 +97,11 @@
           <div class="section-title">Control</div>
           <div class="button-row">
             <button id="stepButton" class="icon-button" title="Step current agent">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l9-7-9-7Z" /><path d="M18 5v14" /></svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M7 5v14l9-7-9-7Z" /><path d="M18 5v14" /></svg>
               Step
             </button>
             <button id="playButton" class="icon-button primary" title="Play or pause agent turns">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7-11-7Z" /></svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M8 5v14l11-7-11-7Z" /></svg>
               Play
             </button>
             <button id="resetButton" class="icon-button" title="Reset game">
