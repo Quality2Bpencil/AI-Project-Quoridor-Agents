@@ -1,12 +1,16 @@
-# Quoridor Engine
+# From Developing to Exploiting Quoridor Agents
 
-这是一个用 Python 实现的“步步为营”（Quoridor）游戏引擎，主要用于人工智能课程 Project。
+这是 Group 18 的 CS181 人工智能课程 Project。项目主题来自 proposal：**From Developing to Exploiting Quoridor Agents: Minimal Adversarial Policies Against Search and Learning Baselines**。
 
-项目重点是提供一个规则正确、接口清晰、方便可视化和模型训练的核心环境。当前已经包含：
+项目不是单纯堆叠更强的 Quoridor agent，而是研究一个更具体的问题：
+
+> 如何用较简单、可解释的 adversarial policy，稳定利用 Greedy BFS、depth-limited Minimax、finite-budget MCTS，以及后续 deterministic RL / NN policy 的盲点？
+
+当前仓库已经把这个研究问题落到了一个可运行的 Python 环境中：
 
 - Quoridor 核心规则引擎
 - Tkinter 图形界面
-- Web 图形界面，支持 Human / Agent 任意组合对弈
+- 像素化 3D Web 图形界面，支持 Human / Agent 任意组合对弈
 - RandomAgent 示例
 - Greedy BFS / Minimax / MCTS baseline agents
 - PathLure / DepthTrap / RolloutPoison adversarial agents
@@ -14,9 +18,34 @@
 - 固定离散动作空间的训练接口
 - 单元测试
 
+## Proposal 对齐和完成状态
+
+proposal 的核心分解如下：
+
+| Proposal 目标 | 当前状态 | 对应代码 |
+| --- | --- | --- |
+| 标准 Quoridor 规则、移动、跳跃、放墙和通路合法性 | 已实现 | `quoridor/core/` |
+| Greedy BFS baseline | 已实现 | `quoridor/agents/greedy_bfs.py` |
+| Minimax + Alpha-Beta baseline | 已实现 | `quoridor/agents/minimax.py` |
+| finite-budget UCT MCTS baseline | 已实现 | `quoridor/agents/mcts.py` |
+| Path-Lure attack：利用 Greedy BFS 只看短路长度、忽视 path diversity | 已实现 | `PathLureAgent` |
+| Depth-Trap attack：利用 depth-limited Minimax 的短视 horizon | 已实现 | `DepthTrapAgent` |
+| Rollout-Poison attack：利用有限 rollout 下 response 分数接近、难区分 | 已实现 | `RolloutPoisonAgent` |
+| Elo tournament、ablation、trap proxy 指标 | 已实现轻量框架 | `quoridor/evaluation/`, `experiments/` |
+| 用于展示和调试 Human / Agent / Agent-vs-Agent 的可视化界面 | 已实现 | `visual_web.py`, `quoridor/web/` |
+| 固定动作空间训练接口，便于后续接 RL | 已实现接口 | `quoridor/training/discrete_env.py` |
+| Argmax RL victim exploitation | 未实现实际训练/查询 victim，仅保留训练接口 |
+| Neural-pruned MCTS / PUCT / NN value-prior | 未实现，仍是 proposal appendix / future work |
+| Approximate Q-Learning / Deep Q network victim | 未实现，仍是 proposal appendix / future work |
+| 1000+ rounds 的正式实验结果表 | 未提交正式结果；当前脚本支持跑实验，仓库内只保留轻量 smoke 输出在 `tmp/` |
+
+因此，当前项目主线已经覆盖 proposal 的传统 search baseline 和 minimal adversarial policy 部分；神经网络/RL 部分还没有落地为训练代码或可复现实验。
+
 ## 运行环境
 
-只需要 Python 标准库，不需要额外安装依赖。
+核心引擎、训练接口、实验脚本和 Tkinter UI 只需要 Python 标准库，不需要额外安装依赖。
+
+Web UI 的 Python server 也只依赖标准库；浏览器前端会从 CDN 加载 Three.js，并使用仓库内的本地 pawn OBJ 模型。如果完全离线，核心引擎和 Tkinter UI 仍可使用，但 Web 3D 棋盘需要提前准备 Three.js 资源。
 
 推荐 Python 版本：Python 3.11+
 
@@ -49,7 +78,8 @@ AI_Project/
       tkinter_app.py      # Tkinter 可视化界面
     web/
       server.py           # 标准库 Web UI server
-      static/             # Web 棋盘、控制台和动效
+      static/             # Web 棋盘、控制台、像素后处理和 3D pawn 模型
+        models/pawn/      # Web UI 使用的棋子 OBJ 资源
   experiments/
     run_tournament.py     # 小规模 tournament 命令行入口
   tests/
@@ -86,10 +116,11 @@ Web UI 支持：
 - `Play/Pause` 自动播放 agent 回合
 - `Reset` 重开
 - `Move / Horizontal wall / Vertical wall` 人类操作模式
-- 合法走法/墙位提示
+- 合法走法提示、合法墙位 ghost 预览和悬停高亮
 - 最短路径、path diversity、剩余墙数、回合数和 action log
+- 像素化后处理、左右玩家状态面板、wall rack 和 3D pawn 模型
 
-Web UI 只依赖 Python 标准库；前端会尝试从 CDN 加载 GSAP 做落子和放墙动效，加载失败时仍然可以使用。
+Web UI 的后端只依赖 Python 标准库；前端通过 CDN 加载 Three.js / OrbitControls / OBJLoader / postprocessing 模块。当前没有使用 GSAP。
 
 ## Tkinter 图形界面
 
@@ -180,6 +211,8 @@ rollout_poison = RolloutPoisonAgent(seed=0)
 - `PathLureAgent`：针对 Greedy BFS，奖励让对手 path diversity 下降的动作。
 - `DepthTrapAgent`：针对 depth-limited Minimax，奖励对手浅层响应后我方仍有强 follow-up 的动作。
 - `RolloutPoisonAgent`：针对有限预算 MCTS，奖励对手浅 rollout 下响应分数接近、难以区分的局面。
+
+这些 adversarial agents 是 proposal 主线的最小可运行版本。它们不是通用最强 agent，而是面向特定 victim blind spot 的 exploit policy。
 
 ## 对战评估
 
@@ -332,6 +365,7 @@ python -m unittest discover -s tests -v
 - Greedy BFS / Minimax / MCTS / PathLure / DepthTrap / RolloutPoison 返回合法动作
 - 单局对战、round-robin tournament 和 Elo 更新
 - 训练接口动作编码和合法动作 mask
+- Web session payload、agent 配置和 agent step
 
 ## 交接说明
 
@@ -342,5 +376,12 @@ python -m unittest discover -s tests -v
 - 写 adversarial policy：参考 `quoridor/agents/adversarial.py`
 - 跑实验：参考 `experiments/run_tournament.py`
 - 接训练代码：参考 `quoridor/training/discrete_env.py`
-- 调试界面：运行 `python visual.py`
+- 调试 Web 界面：运行 `python visual_web.py`
+- 调试 Tkinter 界面：运行 `python visual.py`
 - 验证改动：运行 `python -m unittest discover -s tests -v`
+
+如果后续要继续完成 proposal 的 NN/RL 部分，建议先补：
+
+- 一个实际可训练/可加载的 deterministic Q victim，并暴露 `choose_action(state, legal_actions)`；
+- 一个 neural-pruned MCTS / PUCT baseline，而不是只在 appendix 中描述；
+- 固定 seeds、games-per-pair、max-turns 的正式 tournament 输出，并把结果 CSV 或汇总表纳入报告材料。

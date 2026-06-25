@@ -62,12 +62,14 @@ class WebGameSession:
         self.agents = [self._make_agent(0), self._make_agent(1)]
         self.history: deque[str] = deque(maxlen=80)
         self.last_action: str | None = None
+        self.wall_owners: dict[tuple[str, int, int], int] = {}
 
     def reset(self) -> dict[str, Any]:
         self.env.reset()
         self.agents = [self._make_agent(0), self._make_agent(1)]
         self.history.clear()
         self.last_action = None
+        self.wall_owners.clear()
         return self.state_payload()
 
     def set_players(self, players: list[str]) -> dict[str, Any]:
@@ -120,7 +122,8 @@ class WebGameSession:
             "turnCount": state.turn_count,
             "pawns": [list(pos) for pos in state.pawn_positions],
             "walls": [
-                {"orientation": orientation, "row": row, "col": col}
+                {"orientation": orientation, "row": row, "col": col,
+                 "owner": self.wall_owners.get((orientation, row, col), 0)}
                 for orientation, row, col in sorted(state.walls)
             ],
             "remainingWalls": list(state.remaining_walls),
@@ -132,7 +135,7 @@ class WebGameSession:
             "pathDiversity": [path_diversity(state, 0), path_diversity(state, 1)],
             "paths": [_shortest_path(state, 0), _shortest_path(state, 1)],
             "lastAction": self.last_action,
-            "history": list(self.history)[-20:],
+            "history": list(self.history)[-60:],
         }
 
     def _make_agent(self, player: int) -> object | None:
@@ -141,6 +144,8 @@ class WebGameSession:
 
     def _step(self, action: Action) -> None:
         player = self.env.state.current_player
+        if isinstance(action, WallAction):
+            self.wall_owners[(action.orientation, action.row, action.col)] = player
         self.env.step(action)
         label = _format_action(player, action)
         self.last_action = label
@@ -278,3 +283,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     run(args.host, args.port)
+
+
+if __name__ == "__main__":
+    main()

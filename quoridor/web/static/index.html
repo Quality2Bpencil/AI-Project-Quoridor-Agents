@@ -4,144 +4,140 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quoridor AI Battle Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/app.css" />
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+      }
+    }
+    </script>
   </head>
   <body>
-    <main class="app-shell">
-      <aside class="side-rail" aria-label="Visualizer layers">
-        <div class="brand-lockup">
+    <main class="game-shell">
+      <header class="topbar">
+        <div class="tb-left">
           <div class="brand-cube" aria-hidden="true">Q</div>
-          <div>
-            <strong>Quoridor Lab</strong>
-            <span>Agent runtime</span>
+          <strong>Quoridor</strong><em>AI</em>
+        </div>
+        <div class="tb-right">
+          <span class="timer" id="timerValue">00:00</span>
+          <span class="badge" id="matchStatus"><i class="badge-pip"></i>Ready</span>
+        </div>
+      </header>
+
+      <div class="game-area">
+        <aside class="side-panel side-p0" aria-label="Player 0">
+          <div class="portrait-frame">
+            <div class="portrait-pawn p0" aria-hidden="true"></div>
           </div>
-        </div>
-
-        <div class="rail-stack" aria-label="Workspace sections">
-          <div class="rail-item active"><span class="rail-glyph grid" aria-hidden="true"></span>Board</div>
-          <div class="rail-item"><span class="rail-glyph bars" aria-hidden="true"></span>Analysis</div>
-          <div class="rail-item"><span class="rail-glyph bot" aria-hidden="true"></span>Agents</div>
-          <div class="rail-item"><span class="rail-glyph sliders" aria-hidden="true"></span>Config</div>
-        </div>
-
-        <div class="layer-card">
-          <div class="rail-heading">Display layers</div>
-          <label class="layer-row">
-            <input id="togglePaths" type="checkbox" checked />
-            <span class="layer-check on" aria-hidden="true"></span>
-            Shortest paths
-          </label>
-          <label class="layer-row">
-            <input id="toggleLegal" type="checkbox" checked />
-            <span class="layer-check on" aria-hidden="true"></span>
-            Valid moves
-          </label>
-          <label class="layer-row">
-            <input id="toggleCoords" type="checkbox" checked />
-            <span class="layer-check on" aria-hidden="true"></span>
-            Coordinates
-          </label>
-          <label class="layer-row">
-            <input id="toggleWalls" type="checkbox" checked />
-            <span class="layer-check wall" aria-hidden="true"></span>
-            Walls
-          </label>
-        </div>
-
-        <div class="rail-footer">
-          <span>Local match</span>
-          <strong>Connected</strong>
-        </div>
-      </aside>
-
-      <section class="stage" aria-label="Quoridor board">
-        <header class="topbar">
-          <div>
-            <h1>Quoridor AI Battle Visualizer</h1>
-            <p>Inspect moves, walls, shortest paths, and policy behavior on one live board.</p>
+          <div class="player-name">Player 0</div>
+          <select id="player0" class="sp-select" aria-label="P0 agent"></select>
+          <div class="sp-turn" id="p0Turn"></div>
+          <div class="player-stats">
+            <span>Path <strong id="p0PanelPath">8</strong></span>
+            <span>Div <strong id="p0PanelDiv">0</strong></span>
+            <span>Walls <strong id="p0WallCount">10</strong></span>
           </div>
-          <div class="match-status" id="matchStatus">Ready</div>
-        </header>
+          <div class="sp-rack" id="p0Rack"></div>
+        </aside>
 
-        <div class="board-wrap">
+        <section class="board-stage" aria-label="Quoridor board">
           <div class="board-frame">
-            <div class="board-grid" id="boardGrid" aria-label="Interactive Quoridor board"></div>
+            <div class="board-container" id="boardContainer"></div>
+            <div class="board-hint" id="boardHint">Ready</div>
           </div>
-          <div class="axis axis-top" id="axisTop"></div>
-          <div class="axis axis-left" id="axisLeft"></div>
+        </section>
+
+        <aside class="side-panel side-p1" aria-label="Player 1">
+          <div class="portrait-frame">
+            <div class="portrait-pawn p1" aria-hidden="true"></div>
+          </div>
+          <div class="player-name">Player 1</div>
+          <select id="player1" class="sp-select" aria-label="P1 agent"></select>
+          <div class="sp-turn" id="p1Turn"></div>
+          <div class="player-stats">
+            <span>Path <strong id="p1PanelPath">8</strong></span>
+            <span>Div <strong id="p1PanelDiv">0</strong></span>
+            <span>Walls <strong id="p1WallCount">10</strong></span>
+          </div>
+          <div class="sp-rack" id="p1Rack"></div>
+        </aside>
+      </div>
+
+      <div class="controls-bar">
+        <div class="cb-group command-group">
+          <button id="stepButton" class="cb-btn icon-btn" title="[->]" aria-label="Step">Step</button>
+          <button id="playButton" class="cb-btn primary" title="[Space]">Play</button>
+          <button id="resetButton" class="cb-btn icon-btn" title="[R]" aria-label="Reset">Reset</button>
         </div>
-
-        <div class="timeline" aria-label="Move timeline">
-          <div class="timeline-head">
-            <span>Move stream</span>
-            <span id="lastAction">No moves yet</span>
-          </div>
-          <div class="timeline-track" id="timelineTrack"></div>
+        <div class="cb-sep"></div>
+        <div class="cb-group" id="speedPresets" aria-label="Playback speed">
+          <button class="sp-btn" data-ms="1200">0.25x</button>
+          <button class="sp-btn" data-ms="420" data-default>1x</button>
+          <button class="sp-btn" data-ms="80">4x</button>
         </div>
-      </section>
+        <div class="cb-sep"></div>
+        <div class="cb-group mode-tabs" aria-label="Human action mode">
+          <button class="mode active" data-mode="move" title="[M]">Move</button>
+          <button class="mode" data-mode="H" title="[H]">Wall H</button>
+          <button class="mode" data-mode="V" title="[V]">Wall V</button>
+        </div>
+        <div class="cb-sep"></div>
+        <div class="cb-info">
+          <span>Turn <strong id="turnMetric">0</strong></span>
+          <span class="ci-p0">P0 <strong id="p0Path">8</strong></span>
+          <span class="ci-p1">P1 <strong id="p1Path">8</strong></span>
+        </div>
+        <div class="cb-spacer"></div>
+        <label class="cb-check"><input id="togglePaths" type="checkbox" checked /><span>Paths</span></label>
+        <label class="cb-check"><input id="toggleLegal" type="checkbox" checked /><span>Hints</span></label>
+        <label class="cb-check"><input id="toggleWalls" type="checkbox" checked /><span>Walls</span></label>
+        <div class="cb-sep"></div>
+        <button class="cb-btn" id="drawerToggle" title="[L]">Log</button>
+      </div>
 
-      <aside class="console" aria-label="Game controls">
-        <section class="console-section players">
-          <div class="section-title">Players</div>
-          <label class="player-card player-card-p0">
-            <span><i aria-hidden="true"></i>Player 0</span>
-            <select id="player0"></select>
-          </label>
-          <label class="player-card player-card-p1">
-            <span><i aria-hidden="true"></i>Player 1</span>
-            <select id="player1"></select>
-          </label>
-        </section>
-
-        <section class="console-section controls">
-          <div class="section-title">Control</div>
-          <div class="button-row">
-            <button id="stepButton" class="icon-button" title="Step current agent">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M7 5v14l9-7-9-7Z" /><path d="M18 5v14" /></svg>
-              Step
-            </button>
-            <button id="playButton" class="icon-button primary" title="Play or pause agent turns">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M8 5v14l11-7-11-7Z" /></svg>
-              Play
-            </button>
-            <button id="resetButton" class="icon-button" title="Reset game">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.05-4.95" /><path d="M5 5v5h5" /></svg>
-              Reset
-            </button>
-          </div>
-          <label class="range">
-            <span>Speed</span>
-            <input id="speedSlider" type="range" min="80" max="1200" step="40" value="420" />
-          </label>
-          <div class="mode-tabs" role="tablist" aria-label="Human action mode">
-            <button class="mode active" data-mode="move">Move</button>
-            <button class="mode" data-mode="H">Horizontal wall</button>
-            <button class="mode" data-mode="V">Vertical wall</button>
-          </div>
-        </section>
-
-        <section class="console-section metrics">
-          <div class="section-title">Metrics</div>
-          <div class="metric-grid">
-            <div><span>Turn</span><strong id="turnMetric">0</strong></div>
-            <div><span>Current</span><strong id="currentMetric">P0</strong></div>
-            <div><span>P0 path</span><strong id="p0Path">8</strong></div>
-            <div><span>P1 path</span><strong id="p1Path">8</strong></div>
-            <div><span>P0 diversity</span><strong id="p0Diversity">1</strong></div>
-            <div><span>P1 diversity</span><strong id="p1Diversity">1</strong></div>
-            <div><span>P0 walls</span><strong id="p0Walls">10</strong></div>
-            <div><span>P1 walls</span><strong id="p1Walls">10</strong></div>
-          </div>
-        </section>
-
-        <section class="console-section log">
-          <div class="section-title">Log</div>
-          <ol id="actionLog"></ol>
-        </section>
-      </aside>
+      <div class="tl-strip">
+        <div class="tl-track" id="timelineTrack"></div>
+        <span class="tl-info" id="lastAction">No actions yet</span>
+      </div>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-    <script src="/app.js"></script>
+    <aside class="drawer" id="drawer">
+      <div class="dr-header">
+        <span class="dr-title">Tactical Log</span>
+        <button class="dr-close" id="drawerClose" aria-label="Close log">x</button>
+      </div>
+      <section class="dr-section">
+        <div class="section-label">Metrics</div>
+        <div class="metric-grid">
+          <div class="metric"><span>Turn</span><strong id="turnMetric2">0</strong></div>
+          <div class="metric"><span>Current</span><strong id="currentMetric">P0</strong></div>
+          <div class="metric val-p0"><span>P0 Path</span><strong id="p0PathD">8</strong></div>
+          <div class="metric val-p1"><span>P1 Path</span><strong id="p1PathD">8</strong></div>
+          <div class="metric val-p0"><span>P0 Div</span><strong id="p0Diversity">0</strong></div>
+          <div class="metric val-p1"><span>P1 Div</span><strong id="p1Diversity">0</strong></div>
+        </div>
+      </section>
+      <section class="dr-section dr-log">
+        <div class="section-label">Action Log</div>
+        <ol id="actionLog"></ol>
+      </section>
+    </aside>
+
+    <div class="winner-overlay" id="winnerOverlay" aria-hidden="true">
+      <div class="winner-card" id="winnerCard">
+        <div class="w-crown" id="winnerCrown"></div>
+        <h2 class="w-title" id="winnerTitle">Player 0 Wins!</h2>
+        <p class="w-detail" id="winnerDetail">Completed in 0 turns</p>
+        <button class="w-replay" id="winnerReplay">New Game</button>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
   </body>
 </html>
