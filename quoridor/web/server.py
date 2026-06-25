@@ -15,12 +15,17 @@ from urllib.parse import urlparse
 
 from quoridor import MoveAction, QuoridorEnv, WallAction
 from quoridor.agents import (
+    ApproxQLearningAgent,
+    ArgmaxQTrapAgent,
     CounterfactualTrapAgent,
+    DeepQAgent,
     DepthTrapAgent,
     GreedyBFSAgent,
     MCTSAgent,
     MinimaxAgent,
     PathLureAgent,
+    PUCTAgent,
+    QLearningAgent,
     RandomAgent,
     RolloutPoisonAgent,
 )
@@ -44,6 +49,10 @@ AGENT_FACTORIES: dict[str, AgentFactory | None] = {
     "Greedy BFS": _factory(GreedyBFSAgent, action_limit=20, wall_limit=12),
     "Minimax d1": _factory(MinimaxAgent, depth=1, action_limit=10, wall_limit=6),
     "MCTS 8": _factory(MCTSAgent, iterations=8, rollout_depth=5, action_limit=8, wall_limit=4),
+    "PUCT 8": _factory(PUCTAgent, simulations=8, action_limit=8, wall_limit=4),
+    "Q-Learning": _factory(QLearningAgent, table_path=Path("experiments/results/q_learning_policy.json")),
+    "Approx-Q": _factory(ApproxQLearningAgent, weights_path=Path("experiments/results/approx_q_policy.json")),
+    "Deep-Q": _factory(DeepQAgent, checkpoint_path=Path("experiments/results/deep_q_policy.pt")),
     "PathLure": _factory(PathLureAgent, action_limit=8, wall_limit=4, victim_action_limit=8),
     "DepthTrap": _factory(DepthTrapAgent, action_limit=8, wall_limit=4, victim_action_limit=6, followup_limit=6),
     "RolloutPoison": _factory(
@@ -60,6 +69,14 @@ AGENT_FACTORIES: dict[str, AgentFactory | None] = {
         victim_action_limit=4,
         response_width=2,
         followup_limit=4,
+    ),
+    "ArgmaxQTrap": _factory(
+        ArgmaxQTrapAgent,
+        action_limit=4,
+        wall_limit=2,
+        victim_action_limit=3,
+        response_width=1,
+        followup_limit=3,
     ),
 }
 

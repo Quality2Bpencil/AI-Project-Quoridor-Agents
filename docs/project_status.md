@@ -29,7 +29,7 @@ proposal 中的研究路线可以拆成四层：
    - Neural-pruned MCTS / PUCT。
    - Approximate Q-Learning / Deep Q victim。
 
-当前仓库主要完成了第 1-3 层；第 4 层还没有实际训练代码或可复现实验。
+当前仓库已经完成第 1-3 层，并补齐了第 4 层的可运行初版：tabular Q-learning、linear Approx-Q、Torch Deep-Q、Argmax-Q victim trap，以及 heuristic-prior PUCT。真正神经网络 policy-value PUCT 仍未实现。
 
 ## 当前已实现
 
@@ -44,10 +44,16 @@ proposal 中的研究路线可以拆成四层：
 | DepthTrapAgent | 已完成 | `quoridor/agents/adversarial.py` | 针对 shallow/depth-limited minimax 的 follow-up trap。 |
 | RolloutPoisonAgent | 已完成 | `quoridor/agents/adversarial.py` | 针对 finite-budget MCTS 的 response ambiguity。 |
 | CounterfactualTrapAgent | 已完成初版 | `quoridor/agents/adversarial.py` | 对多个 plausible victim response 做鲁棒打分，奖励 path delta + trap transition + follow-up。 |
+| ArgmaxQTrapAgent | 已完成初版 | `quoridor/agents/adversarial.py` | 用 deterministic `QLearningAgent(epsilon=0)` 作为 victim response model，补齐 argmax RL exploitation 接口。 |
 | 共享启发式 | 已完成 | `quoridor/agents/heuristics.py` | path distance、path diversity、candidate action ranking。 |
+| PUCT baseline | 已完成初版 | `quoridor/agents/puct.py` | heuristic policy prior + value estimate 的 PUCT，可替换为训练后的 neural prior/value。 |
 | Tournament / Elo | 已完成轻量版 | `quoridor/evaluation/`, `experiments/run_tournament.py` | 支持 round-robin、CSV、Elo standings。 |
+| Formal Arena | 已完成初版 | `quoridor/evaluation/arena.py`, `experiments/run_tournament.py` | 支持并行 worker、resume、增量 CSV、matchup matrix、score matrix。 |
 | PathLure ablation | 已完成轻量版 | `experiments/run_ablation.py` | 支持 trap weight sweep。 |
 | 训练接口 | 已完成接口 | `quoridor/training/discrete_env.py` | 209 维离散动作空间、legal mask、flat observation。 |
+| Tabular Q-Learning | 已完成初版 | `quoridor/agents/q_learning.py`, `quoridor/training/q_learning.py` | 自博弈 Q-table、JSON policy 保存/加载、UI/tournament agent 接入。 |
+| Linear Approx-Q | 已完成初版 | `quoridor/agents/approx_q.py`, `quoridor/training/approx_q_learning.py` | 线性特征 Q-function、自博弈权重训练、JSON weight 保存/加载。 |
+| Deep Q-Network | 已完成初版 | `quoridor/agents/deep_q.py`, `quoridor/training/deep_q.py` | PyTorch DQN、target net、replay buffer、legal action mask、CUDA 训练入口。 |
 | Tkinter UI | 已完成基础版 | `visual.py`, `quoridor/ui/` | 支持 Human/Random 组合。 |
 | Web UI | 已完成展示版 | `visual_web.py`, `quoridor/web/` | 支持 Human/Agent 任意组合、3D 棋盘、像素风 HUD、合法动作提示、agent step/play。 |
 | 单元测试 | 已完成基础覆盖 | `tests/` | 覆盖规则、训练接口、search agents、evaluation、web session。 |
@@ -66,11 +72,12 @@ proposal 中的研究路线可以拆成四层：
 
 | 目标 | 状态 | 需要补的内容 |
 | --- | --- | --- |
-| Argmax RL victim exploitation | 未实现 | 需要训练或加载一个 deterministic Q policy，并暴露 `choose_action(state, legal_actions)`。 |
-| Approximate Q-Learning / Deep Q victim | 未实现 | 需要模型结构、训练循环、checkpoint、评估脚本。 |
-| Neural-pruned MCTS / PUCT | 未实现 | 需要 policy/value prior、PUCT search、与普通 MCTS 的对照实验。 |
+| Argmax RL victim exploitation | 已完成初版，待正式实验 | 已有 deterministic Q victim 和 `ArgmaxQTrapAgent`；仍需训练稳定 Q-table 并跑 exploit 对照。 |
+| Approximate Q-Learning / Deep Q victim | 已完成初版，待正式实验 | 已有 linear feature Q-function、Torch DQN、训练脚本和 checkpoint 加载 agent。 |
+| Neural-pruned MCTS / PUCT | heuristic-prior PUCT 已完成，neural prior/value 未实现 | 已有 PUCT search 接口；后续训练 policy/value model 后可替换默认启发式 prior/value。 |
 | 1000+ rounds 正式实验 | 未完成 | 当前只有轻量 tournament/ablation 脚本；需要固定 seeds、参数表、正式 CSV 和汇总。 |
-| 论文/报告级结果表 | 未完成 | 需要把 tournament 输出整理成 win rate、Elo、trap_events、path_delta 等表格。 |
+| 论文/报告级结果表 | 部分完成 | Arena 已可输出 matchup matrix 和 score matrix；仍需正式长跑数据。 |
+| 学术论文稿件 | 已完成骨架 | `docs/paper_draft.md` 已建立论文结构、方法映射、实验待办和未验证结果占位。 |
 | Web UI 离线资源 | 部分完成 | pawn 模型已本地化；Three.js 仍从 CDN 加载，完全离线展示需要 vendored JS 或构建流程。 |
 
 ## 当前验证状态
@@ -85,7 +92,7 @@ python -m unittest discover -s tests -v
 验证结果：
 
 - JavaScript 语法检查通过。
-- Python 单元测试通过，当前测试数为 40。
+- Python 单元测试通过，当前测试数为 58。
 - Web UI 已在本地 `http://127.0.0.1:8766` 做过桌面和移动视口 smoke check。
 
 ## 算法审计记录
@@ -100,11 +107,153 @@ python -m unittest discover -s tests -v
 本轮新增验证命令：
 
 ```powershell
-python -m compileall -q quoridor tests
+python -m compileall -q quoridor tests experiments
 python -m unittest discover -s tests -v
 python experiments\run_tournament.py --preset smoke --games-per-pair 1 --max-turns 30 --output tmp\algorithm_audit_tournament_smoke_after.csv
 python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --max-turns 5 --output tmp\algorithm_audit_tournament_adversarial_tiny.csv
 ```
+
+本轮 RL / PUCT 验证命令：
+
+```powershell
+python -m unittest tests.test_approx_q tests.test_puct tests.test_q_learning tests.test_search_agents -v
+python experiments\train_q_learning.py --episodes 3 --max-turns 8 --output tmp\q_learning_smoke_policy.json
+python experiments\train_approx_q.py --episodes 3 --max-turns 8 --output tmp\approx_q_smoke_policy.json
+python experiments\run_tournament.py --preset full --games-per-pair 1 --max-turns 20 --output tmp\tournament_full_after_algorithms.csv
+python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --max-turns 5 --output tmp\tournament_adversarial_after_algorithms.csv
+```
+
+结果：
+
+- `python -m compileall -q quoridor tests experiments` 通过。
+- 新增算法相关 23 个测试通过。
+- 全量单元测试 58 个通过。
+- Q-learning smoke training：3 episodes，写出 `tmp\q_learning_smoke_policy.json`。
+- Approx-Q smoke training：3 episodes，写出 `tmp\approx_q_smoke_policy.json`。
+- `full` tournament smoke 通过，写出 `tmp\tournament_full_after_algorithms.csv`。
+- `adversarial` tournament smoke 通过，写出 `tmp\tournament_adversarial_after_algorithms.csv`。
+- `research` preset 默认参数较重，`--max-turns 5` 也不适合日常 smoke；正式实验前需要先降低或拆分参数预算。
+- Web server 已重启在 `http://127.0.0.1:8766`，当前新增 agent 单步 API 粗测：
+  - `PUCT 8` avg 123.5ms, max 333.4ms。
+  - `Approx-Q` avg 14.9ms, max 28.8ms。
+  - `ArgmaxQTrap` avg 85.2ms, max 218.7ms。
+
+## GPU 训练记录
+
+本机 GPU：
+
+- NVIDIA GeForce RTX 4060 Laptop GPU, 8GB VRAM。
+
+结果：
+
+- Tabular Q-learning：200 episodes，244.06s，wins `(125, 74)`, draws `1`，写出 `experiments\results\q_learning_policy.json`。
+- Approx-Q：200 episodes，wins `(93, 99)`, draws `8`，写出 `experiments\results\approx_q_policy.json`。
+- Deep-Q：100 episodes，230.72s，device `cuda`，updates `11107`，wins `(8, 13)`, draws `79`，写出 `experiments\results\deep_q_policy.pt`。
+
+## Formal Arena 记录
+
+现有正式竞技场入口：
+
+```powershell
+python experiments\run_tournament.py --preset smoke --games-per-pair 2 --max-turns 6 --workers 2 --resume --output tmp\arena_smoke_games.csv --matrix-output tmp\arena_smoke_matrix.csv --score-matrix-output tmp\arena_smoke_score.csv
+```
+
+能力：
+
+- 并行：`--workers N` 使用 `ProcessPoolExecutor` 多进程执行每局 game task。
+- 可恢复：`--resume` 会读取已有 output CSV 的 `game_id`，跳过已完成局。
+- 增量落盘：每局完成后由主进程 append 一行 CSV，并 flush，避免长跑中断丢全部结果。
+- 去重随机性：新 arena row 包含 `seed`，preset worker 会用每局 seed offset 构建 agent，避免把同一 deterministic 对局重复统计成多局。
+- 性能记录：新 arena row 包含 `elapsed_seconds`，matchup matrix 包含 `avg_elapsed_seconds`。
+- 进度输出：`--progress-interval N` 每 N 局输出完成数、吞吐率和 ETA。
+- matchup matrix：`--matrix-output` 输出 long-format 对阵矩阵，包含 games/wins/losses/draws/score_rate/win_rate/avg_turns/avg_trap_events/avg_wall_actions/avg_path_delta。
+- score matrix：`--score-matrix-output` 输出 wide-format 分数率矩阵，适合直接转论文表格或 heatmap。
+
+验证：
+
+- 第一次并行 smoke：`tasks=6 completed_now=6 skipped_or_existing=0 workers=2`。
+- 第二次同命令 resume：`tasks=6 completed_now=0 skipped_or_existing=6 workers=2`。
+- 已生成 `tmp\arena_smoke_games.csv`、`tmp\arena_smoke_matrix.csv`、`tmp\arena_smoke_score.csv`。
+- 全量单元测试：62 tests OK。
+
+注意：
+
+- `research` preset 含 MCTS/PUCT/CounterTrap/ArgmaxQTrap/Deep-Q，建议先用 `--workers 2` 或 `--workers 4` 试跑；Deep-Q 多进程会让每个 worker 各自加载 checkpoint，workers 过多会浪费显存。
+- 正式论文实验建议把 games CSV、matchup matrix 和 score matrix 一起保存到 `experiments\results\`，不要只保存 standings 文本输出。
+
+## Trap Efficacy 竞技记录
+
+为论文准备的第一批 trap efficacy 数据已经生成。早期 deterministic 数据保留作开发记录；正式引用优先使用带 per-game seed 和置信区间的 optimized target 数据。
+
+完整 targeted preset round-robin：
+
+```powershell
+python experiments\run_tournament.py --preset trap_eval --games-per-pair 6 --max-turns 80 --workers 4 --resume --output experiments\results\trap_eval_games.csv --matrix-output experiments\results\trap_eval_matchups.csv --score-matrix-output experiments\results\trap_eval_scores.csv
+```
+
+结果：
+
+- 216 / 216 局完成，全部 `status=ok`。
+- 输出：
+  - `experiments\results\trap_eval_games.csv`
+  - `experiments\results\trap_eval_matchups.csv`
+  - `experiments\results\trap_eval_scores.csv`
+  - `experiments\results\trap_effectiveness.csv`
+
+为了更直接衡量 intended trap-victim pair，又跑了专门目标对局：
+
+```powershell
+python experiments\run_trap_targets.py --games-per-pair 20 --max-turns 100 --workers 4 --resume --output experiments\results\trap_targets_games.csv --matrix-output experiments\results\trap_targets_matchups.csv --score-matrix-output experiments\results\trap_targets_scores.csv --summary-output experiments\results\trap_effectiveness_targets.csv
+```
+
+结果表：
+
+| Trap | Target | Games | Wins | Losses | Score rate | Avg trap events | Avg target path delta | 结论 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| PathLure | Greedy BFS | 20 | 10 | 10 | 0.5000 | 0.000 | -5.000 | 当前版本未证明有效。 |
+| DepthTrap | Minimax d1 | 20 | 20 | 0 | 1.0000 | 0.000 | -2.500 | 有效。 |
+| RolloutPoison | MCTS 5 | 20 | 20 | 0 | 1.0000 | 1.000 | -0.500 | 有效。 |
+| CounterTrap | MCTS 5 | 20 | 20 | 0 | 1.0000 | 0.500 | 3.500 | 有效。 |
+| ArgmaxQTrap | Q-learning | 20 | 10 | 10 | 0.5000 | 1.000 | 2.500 | 当前版本未证明有效，需要改进或更多训练。 |
+
+论文表格源文件：
+
+- `experiments\results\trap_targets_games.csv`
+- `experiments\results\trap_targets_matchups.csv`
+- `experiments\results\trap_targets_scores.csv`
+- `experiments\results\trap_effectiveness_targets.csv`
+
+初步结论必须保守写：目前能证明 **DepthTrap、RolloutPoison、CounterTrap** 对目标 victim 有效；**PathLure、ArgmaxQTrap** 当前实现还不能作为有效 trap 结论。
+
+优化后 seeded target 对局：
+
+```powershell
+python experiments\run_trap_targets.py --games-per-pair 20 --max-turns 100 --workers 4 --progress-interval 20 --output experiments\results\trap_targets_optimized_games.csv --matrix-output experiments\results\trap_targets_optimized_matchups.csv --score-matrix-output experiments\results\trap_targets_optimized_scores.csv --summary-output experiments\results\trap_effectiveness_optimized_targets.csv
+```
+
+结果表：
+
+| Trap | Target | Games | Wins | Losses | Score rate | 95% CI | Avg trap events | Avg target path delta | 结论 |
+| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |
+| PathLure | Greedy BFS | 20 | 20 | 0 | 1.0000 | [0.8389, 1.0000] | 0.000 | -7.000 | 胜率有效，但当前 trap event 指标未捕捉到路径陷阱机制。 |
+| DepthTrap | Minimax d1 | 20 | 19 | 1 | 0.9500 | [0.7639, 0.9911] | 0.300 | 0.350 | 有效。 |
+| RolloutPoison | MCTS 5 | 20 | 18 | 2 | 0.9000 | [0.6990, 0.9721] | 0.400 | 0.750 | 有效。 |
+| CounterTrap | MCTS 5 | 20 | 19 | 1 | 0.9500 | [0.7639, 0.9911] | 0.300 | 2.250 | 有效。 |
+| ArgmaxQTrap | Q-learning | 20 | 13 | 6 | 0.6750 | [0.4567, 0.8369] | 1.150 | 0.200 | 有一定信号，但样本量下仍需更多训练/对局确认。 |
+
+优化内容：
+
+- Arena 每局使用 `seed` offset，不再把固定 seed 的同一盘重复统计为多局。
+- Arena 记录 `elapsed_seconds`，matrix 输出 `avg_elapsed_seconds`。
+- PathLure 增加 bad-wall safety gate，避免墙没有增加目标路径或降低 path diversity 时仍过度放墙。
+- ArgmaxQTrap 默认改为 deterministic victim response (`response_width=1`) 并提高 path-delta/follow-up 权重。
+
+正式论文优先引用：
+
+- `experiments\results\trap_targets_optimized_games.csv`
+- `experiments\results\trap_targets_optimized_matchups.csv`
+- `experiments\results\trap_targets_optimized_scores.csv`
+- `experiments\results\trap_effectiveness_optimized_targets.csv`
 
 ## 新算法设计进展
 
@@ -138,6 +287,31 @@ python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --m
 
 注意：加入 `counter_trap` 后 adversarial preset 的组合数和每步计算都会增加，正式实验前需要固定参数预算。
 
+### RL / PUCT 补齐进展
+
+本轮新增内容：
+
+- `QLearningAgent`：tabular Q-learning victim，使用 current-player perspective state key，未训练或未覆盖状态会回退到一层启发式。
+- `ApproxQLearningAgent`：linear function approximation，特征包括 path progress、opponent slowdown、wall/move 类型、wall balance、center file 和 terminal flag。
+- `DeepQAgent`：PyTorch DQN checkpoint agent，训练时使用 replay buffer、target network 和 legal action mask，可在 CUDA 环境下运行。
+- `ArgmaxQTrapAgent`：把 deterministic Q policy 作为 victim response model，复用 `CounterfactualTrapAgent` 的 robust response scoring。
+- `PUCTAgent`：使用 heuristic policy prior 和 normalized heuristic value 的 PUCT，当前是 neural-pruned MCTS 的接口级 baseline，不声称已有训练后的 neural network。
+- 训练脚本：
+  - `experiments/train_q_learning.py`
+  - `experiments/train_approx_q.py`
+
+当前策略与 proposal 的对应关系：
+
+| Proposal 方向 | 当前实现 | 说明 |
+| --- | --- | --- |
+| Trap against Greedy BFS | `PathLureAgent` | 利用最短路贪心忽略 path diversity。 |
+| Trap against depth-limited Minimax | `DepthTrapAgent` | 利用 shallow search 的 follow-up horizon。 |
+| Trap against finite-budget MCTS | `RolloutPoisonAgent`, `CounterfactualTrapAgent` | 利用 shallow rollout / response ambiguity。 |
+| Trap against argmax RL victim | `ArgmaxQTrapAgent` | 使用 deterministic `QLearningAgent` 作为 victim。 |
+| Approximate Q-Learning | `ApproxQLearningAgent` | 线性近似版本。 |
+| Deep Q victim | `DeepQAgent` | Torch DQN，已支持 CUDA 训练和 checkpoint 加载。 |
+| Neural-pruned MCTS / PUCT | `PUCTAgent` | 已实现 PUCT search；neural prior/value 尚未训练。 |
+
 ## 推荐下一步
 
 优先级建议如下：
@@ -163,6 +337,20 @@ python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --m
    - disqualification / max-turn draw rate
 
 4. 如果要继续 proposal 的 NN/RL 部分，先实现 deterministic Q victim，再写 exploit wrapper。不要直接跳到复杂 NN-MCTS，否则很难和当前 minimal adversarial policy 主线对齐。
+
+5. 下一步正式实验前，先训练并冻结两个 policy 文件：
+
+   ```powershell
+   python experiments\train_q_learning.py --episodes 500 --max-turns 120 --output experiments\results\q_learning_policy.json
+   python experiments\train_approx_q.py --episodes 500 --max-turns 120 --output experiments\results\approx_q_policy.json
+   F:\Programs\PythonEnv\torch10\python.exe experiments\train_deep_q.py --episodes 500 --max-turns 120 --device cuda --output experiments\results\deep_q_policy.pt
+   ```
+
+6. 论文结果表应从固定输出生成，不手写结果：
+
+   ```powershell
+   python experiments\run_tournament.py --preset research --games-per-pair 10 --max-turns 150 --workers 4 --resume --output experiments\results\tournament_research_games.csv --matrix-output experiments\results\tournament_research_matchups.csv --score-matrix-output experiments\results\tournament_research_scores.csv
+   ```
 
 ## 交接备注
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 from typing import Sequence
 
 from quoridor.agents.greedy_bfs import GreedyBFSAgent
@@ -14,7 +15,8 @@ from quoridor.agents.heuristics import (
     path_diversity,
     ranked_actions,
 )
-from quoridor.core.actions import Action
+from quoridor.agents.q_learning import QLearningAgent
+from quoridor.core.actions import Action, WallAction
 from quoridor.core.rules import apply_action
 from quoridor.core.state import QuoridorState
 
@@ -35,6 +37,11 @@ class PathLureAgent:
         wall_limit: int = 16,
         wall_radius: int = 2,
         victim_action_limit: int = 24,
+        path_delta_weight: float = 4.0,
+        followup_limit: int = 6,
+        followup_weight: float = 0.25,
+        wall_overuse_penalty: float = 0.5,
+        bad_wall_penalty: float = 35.0,
     ) -> None:
         self.rng = random.Random(seed)
         self.victim = victim or GreedyBFSAgent(seed=seed)
@@ -43,6 +50,11 @@ class PathLureAgent:
         self.wall_limit = wall_limit
         self.wall_radius = wall_radius
         self.victim_action_limit = victim_action_limit
+        self.path_delta_weight = path_delta_weight
+        self.followup_limit = followup_limit
+        self.followup_weight = followup_weight
+        self.wall_overuse_penalty = wall_overuse_penalty
+        self.bad_wall_penalty = bad_wall_penalty
 
     def choose_action(self, state: QuoridorState, legal_actions: Sequence[Action]) -> Action:
         if not legal_actions:
@@ -66,6 +78,8 @@ class PathLureAgent:
 
         def score(action: Action) -> tuple[float, tuple[str, int, int, str]]:
             try:
+                before_opponent_path = path_distance(state, opponent)
+                before_opponent_diversity = path_diversity(state, opponent)
                 after_ours = apply_action(state, action)
                 if after_ours.done:
                     return evaluate_state(after_ours, player), action_sort_key(action)
@@ -81,15 +95,40 @@ class PathLureAgent:
 
                 victim_action = self.victim.choose_action(after_ours, victim_actions)
                 after_victim = apply_action(after_ours, victim_action)
+                opponent_path = path_distance(after_victim, opponent)
                 diversity = path_diversity(after_victim, opponent)
+                path_delta = opponent_path - before_opponent_path
+                diversity_drop = max(0, before_opponent_diversity - diversity)
                 trap_bonus = self.trap_weight * max(0, 2 - diversity)
-                return evaluate_state(after_victim, player) + trap_bonus, action_sort_key(action)
+                immediate = evaluate_state(after_victim, player)
+                value = immediate
+                value += self.path_delta_weight * path_delta
+                value += self.trap_weight * diversity_drop
+                value += trap_bonus
+                value += self._followup_bonus(after_victim, player, immediate)
+                if isinstance(action, WallAction):
+                    value -= self.wall_overuse_penalty
+                    if path_delta <= 0 and diversity_drop <= 0:
+                        value -= self.bad_wall_penalty
+                return value, action_sort_key(action)
             except ValueError:
                 return -100_000.0, action_sort_key(action)
 
         best_value = max(score(action)[0] for action in candidates)
         best_actions = [action for action in candidates if score(action)[0] == best_value]
         return self.rng.choice(sorted(best_actions, key=action_sort_key))
+
+    def _followup_bonus(self, state: QuoridorState, player: int, immediate: float) -> float:
+        followups = ranked_actions(
+            state,
+            max_actions=self.followup_limit,
+            wall_limit=min(self.wall_limit, self.followup_limit),
+            wall_radius=self.wall_radius,
+        )
+        if not followups:
+            return 0.0
+        best_followup = max(evaluate_action(state, followup, player) for followup in followups)
+        return self.followup_weight * max(0.0, best_followup - immediate)
 
 
 class DepthTrapAgent:
@@ -341,6 +380,43 @@ class CounterfactualTrapAgent:
             return 0.0
         best_followup = max(evaluate_action(state, followup, player) for followup in followups)
         return self.followup_weight * max(0.0, best_followup - immediate)
+
+
+class ArgmaxQTrapAgent:
+    """Counterfactual trap policy specialized for deterministic Q victims."""
+
+    def __init__(
+        self,
+        seed: int | None = None,
+        table_path: str | Path | None = Path("experiments/results/q_learning_policy.json"),
+        victim: object | None = None,
+        action_limit: int = 18,
+        wall_limit: int = 10,
+        wall_radius: int = 2,
+        victim_action_limit: int = 8,
+        response_width: int = 1,
+        followup_limit: int = 6,
+        trap_weight: float = 10.0,
+        path_delta_weight: float = 4.0,
+        followup_weight: float = 0.6,
+    ) -> None:
+        q_victim = victim or QLearningAgent(seed=seed, table_path=table_path, epsilon=0.0)
+        self.search = CounterfactualTrapAgent(
+            seed=seed,
+            victim=q_victim,
+            action_limit=action_limit,
+            wall_limit=wall_limit,
+            wall_radius=wall_radius,
+            victim_action_limit=victim_action_limit,
+            response_width=response_width,
+            followup_limit=followup_limit,
+            trap_weight=trap_weight,
+            path_delta_weight=path_delta_weight,
+            followup_weight=followup_weight,
+        )
+
+    def choose_action(self, state: QuoridorState, legal_actions: Sequence[Action]) -> Action:
+        return self.search.choose_action(state, legal_actions)
 
 
 def _candidate_actions(

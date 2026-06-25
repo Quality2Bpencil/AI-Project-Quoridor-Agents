@@ -16,6 +16,26 @@ class RandomAgentTests(unittest.TestCase):
         self.assertIn(action, legal_actions)
         self.assertIsInstance(action, (MoveAction, WallAction))
 
+    def test_random_agent_can_disable_wall_sampling(self):
+        env = QuoridorEnv()
+        agent = RandomAgent(seed=1, wall_probability=0.0)
+
+        for _ in range(20):
+            action = agent.choose_action(env.state, env.legal_actions())
+            self.assertIsInstance(action, MoveAction)
+
+    def test_random_agent_can_force_wall_sampling_when_walls_exist(self):
+        env = QuoridorEnv()
+        agent = RandomAgent(seed=1, wall_probability=1.0)
+
+        action = agent.choose_action(env.state, env.legal_actions())
+
+        self.assertIsInstance(action, WallAction)
+
+    def test_random_agent_rejects_invalid_wall_probability(self):
+        with self.assertRaises(ValueError):
+            RandomAgent(wall_probability=1.5)
+
     def test_random_agent_can_step_environment(self):
         env = QuoridorEnv()
         agents = (RandomAgent(seed=2), RandomAgent(seed=3))

@@ -1,0 +1,11 @@
+agent,opponent,games,wins,losses,draws,score_rate,win_rate,avg_turns,avg_trap_events,avg_wall_actions,avg_path_delta,avg_elapsed_seconds
+argmax_q_trap,q_learning,20,13,6,1,0.6750,0.6500,57.600,1.150,9.000,-5.400,3.068
+counter_trap,mcts_5,20,19,1,0,0.9500,0.9500,29.150,0.300,6.100,-7.650,1.540
+depth_trap,minimax_d1,20,19,1,0,0.9500,0.9500,28.650,0.300,6.000,-7.650,1.234
+greedy_bfs,path_lure,20,0,20,0,0.0000,0.0000,17.500,0.000,0.000,-7.000,1.503
+mcts_5,counter_trap,20,1,19,0,0.0500,0.0500,29.150,0.000,0.450,2.250,1.540
+mcts_5,rollout_poison,20,2,18,0,0.1000,0.1000,35.200,0.250,1.400,0.750,2.449
+minimax_d1,depth_trap,20,1,19,0,0.0500,0.0500,28.650,0.000,0.300,0.350,1.234
+path_lure,greedy_bfs,20,20,0,0,1.0000,1.0000,17.500,0.000,1.000,-8.000,1.503
+q_learning,argmax_q_trap,20,6,13,1,0.3250,0.3000,57.600,0.500,6.250,0.200,3.068
+rollout_poison,mcts_5,20,18,2,0,0.9000,0.9000,35.200,0.400,6.900,-6.900,2.449

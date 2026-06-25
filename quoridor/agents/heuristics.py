@@ -63,31 +63,45 @@ def ranked_actions(
     max_actions: int | None = None,
     wall_limit: int | None = None,
     wall_radius: int = 2,
+    wall_penalty: float = 0.0,
 ) -> list[Action]:
     """Return legal actions ranked by a one-ply heuristic.
 
     Wall actions dominate the raw branching factor, so callers can keep all pawn
-    moves while only taking the highest-scoring wall candidates.
+    moves while only taking the highest-scoring wall candidates. A small
+    wall_penalty is useful for low-budget searches that otherwise over-spend
+    walls because a one-ply path delta looks immediately attractive.
     """
 
     if state.done:
         return []
 
     player = state.current_player if player is None else player
+    scores: dict[Action, float] = {}
+
+    def score(action: Action) -> float:
+        value = scores.get(action)
+        if value is None:
+            value = evaluate_action(state, action, player)
+            if isinstance(action, WallAction):
+                value -= wall_penalty
+            scores[action] = value
+        return value
+
     pawn_actions: list[Action] = list(legal_pawn_moves(state, player))
     wall_actions: list[Action] = list(plausible_wall_actions(state, player, radius=wall_radius))
 
     if wall_limit is not None:
         wall_actions = sorted(
             wall_actions,
-            key=lambda action: (evaluate_action(state, action, player), action_sort_key(action)),
+            key=lambda action: (score(action), action_sort_key(action)),
             reverse=True,
         )[:wall_limit]
 
     actions = pawn_actions + wall_actions
     actions = sorted(
         actions,
-        key=lambda action: (evaluate_action(state, action, player), action_sort_key(action)),
+        key=lambda action: (score(action), action_sort_key(action)),
         reverse=True,
     )
     if max_actions is not None:

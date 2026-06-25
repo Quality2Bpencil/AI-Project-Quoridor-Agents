@@ -2,6 +2,7 @@ import unittest
 
 from quoridor import QuoridorEnv
 from quoridor.agents import (
+    ArgmaxQTrapAgent,
     CounterfactualTrapAgent,
     DepthTrapAgent,
     GreedyBFSAgent,
@@ -11,6 +12,7 @@ from quoridor.agents import (
     RolloutPoisonAgent,
 )
 from quoridor.agents.heuristics import path_distance
+from quoridor.core.actions import MoveAction
 from quoridor.core.state import QuoridorState
 
 
@@ -36,6 +38,32 @@ class SearchAgentTests(unittest.TestCase):
             MCTSAgent(iterations=4, rollout_depth=3, action_limit=6, wall_limit=3, seed=0)
         )
 
+    def test_mcts_expands_best_ranked_action_first_with_tiny_budget(self):
+        env = QuoridorEnv()
+        agent = MCTSAgent(iterations=1, rollout_depth=1, action_limit=6, wall_limit=3, seed=0)
+
+        action = agent.choose_action(env.state, env.legal_actions())
+
+        self.assertEqual(action, MoveAction((7, 4)))
+
+    def test_mcts_prefers_immediate_winning_move_with_tiny_budget(self):
+        state = QuoridorState(pawn_positions=((1, 4), (8, 4)), current_player=0)
+        env = QuoridorEnv()
+        env.state = state
+        agent = MCTSAgent(iterations=1, rollout_depth=1, action_limit=6, wall_limit=3, seed=0)
+
+        action = agent.choose_action(state, env.legal_actions())
+
+        self.assertEqual(action, MoveAction((0, 4)))
+
+    def test_mcts_avoids_obvious_opening_side_step(self):
+        env = QuoridorEnv()
+        agent = MCTSAgent(iterations=4, rollout_depth=3, action_limit=6, wall_limit=3, seed=3)
+
+        action = agent.choose_action(env.state, env.legal_actions())
+
+        self.assertEqual(action, MoveAction((7, 4)))
+
     def test_path_lure_returns_legal_action(self):
         self.assert_agent_returns_legal_action(
             PathLureAgent(seed=0, action_limit=6, wall_limit=3, victim_action_limit=6)
@@ -54,6 +82,18 @@ class SearchAgentTests(unittest.TestCase):
     def test_counterfactual_trap_returns_legal_action(self):
         self.assert_agent_returns_legal_action(
             CounterfactualTrapAgent(
+                seed=0,
+                action_limit=4,
+                wall_limit=2,
+                victim_action_limit=3,
+                response_width=2,
+                followup_limit=3,
+            )
+        )
+
+    def test_argmax_q_trap_returns_legal_action(self):
+        self.assert_agent_returns_legal_action(
+            ArgmaxQTrapAgent(
                 seed=0,
                 action_limit=4,
                 wall_limit=2,

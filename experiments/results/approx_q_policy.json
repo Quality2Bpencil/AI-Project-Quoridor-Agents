@@ -1,0 +1,32 @@
+{
+  "metadata": {
+    "draws": 8,
+    "episodes": 200,
+    "final_epsilon": 0.12843523760415848,
+    "nonzero_weights": 18,
+    "wins": [
+      93,
+      99
+    ]
+  },
+  "weights": {
+    "bias": -0.17715187126250775,
+    "center_file": -0.013706768100957277,
+    "horizontal_wall": -0.11105071651948642,
+    "is_move": -0.02598641006211863,
+    "is_wall": -0.1511654612003894,
+    "move_backward": -0.06783021615264834,
+    "move_forward": -0.11884740650633066,
+    "move_sideways": -0.10364028281546775,
+    "opp_distance": 1.3096064015177626,
+    "opp_slowdown": -0.5978440372667307,
+    "remaining_walls": 0.009389869748757372,
+    "score_delta": 0.2760047412925293,
+    "self_distance": 0.3561271254957014,
+    "self_progress": 0.07281369321284689,
+    "terminal_win": 0.8727244104012261,
+    "vertical_wall": -0.04011474468090329,
+    "wall_balance": 0.26397407187510624,
+    "wall_count": -0.05455470507371296
+  }
+}

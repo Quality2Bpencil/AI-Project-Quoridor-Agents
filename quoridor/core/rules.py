@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import replace
+from functools import lru_cache
 from typing import Iterable
 
 from .actions import Action, MoveAction, Orientation, Position, WallAction
@@ -105,6 +106,7 @@ def wall_conflicts(state: QuoridorState, action: WallAction) -> bool:
     )
 
 
+@lru_cache(maxsize=100_000)
 def has_path_to_goal(state: QuoridorState, player: int) -> bool:
     """Check whether a player still has at least one path to their goal row."""
 
@@ -124,6 +126,7 @@ def has_path_to_goal(state: QuoridorState, player: int) -> bool:
     return False
 
 
+@lru_cache(maxsize=100_000)
 def shortest_path_length(state: QuoridorState, player: int) -> int | None:
     """Return the shortest wall-respecting path length to the goal row."""
 

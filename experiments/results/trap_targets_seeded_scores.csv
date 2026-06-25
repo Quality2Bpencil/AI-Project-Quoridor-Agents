@@ -1,0 +1,10 @@
+agent,argmax_q_trap,counter_trap,depth_trap,greedy_bfs,mcts_5,minimax_d1,path_lure,q_learning,rollout_poison
+argmax_q_trap,,,,,,,,0.6750,
+counter_trap,,,,,0.9500,,,,
+depth_trap,,,,,,0.9500,,,
+greedy_bfs,,,,,,,1.0000,,
+mcts_5,,0.0500,,,,,,,0.1000
+minimax_d1,,,0.0500,,,,,,
+path_lure,,,,0.0000,,,,,
+q_learning,0.3250,,,,,,,,
+rollout_poison,,,,,0.9000,,,,
