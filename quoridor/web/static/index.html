@@ -26,12 +26,12 @@
         </div>
         <div class="tb-right">
           <span class="timer" id="timerValue">00:00</span>
-          <span class="badge" id="matchStatus"><i class="badge-pip"></i>Ready</span>
+          <span class="badge" id="matchStatus" role="status" aria-live="polite"><i class="badge-pip"></i>Ready</span>
         </div>
       </header>
 
       <div class="game-area">
-        <aside class="side-panel side-p0" aria-label="Player 0">
+        <aside class="side-panel side-p0" id="panel0" aria-label="Player 0">
           <div class="portrait-frame">
             <div class="portrait-pawn p0" aria-hidden="true"></div>
           </div>
@@ -49,11 +49,11 @@
         <section class="board-stage" aria-label="Quoridor board">
           <div class="board-frame">
             <div class="board-container" id="boardContainer"></div>
-            <div class="board-hint" id="boardHint">Ready</div>
+            <div class="board-hint" id="boardHint" aria-live="polite">Ready</div>
           </div>
         </section>
 
-        <aside class="side-panel side-p1" aria-label="Player 1">
+        <aside class="side-panel side-p1" id="panel1" aria-label="Player 1">
           <div class="portrait-frame">
             <div class="portrait-pawn p1" aria-hidden="true"></div>
           </div>
@@ -72,7 +72,7 @@
       <div class="controls-bar">
         <div class="cb-group command-group">
           <button id="stepButton" class="cb-btn icon-btn" title="[->]" aria-label="Step">Step</button>
-          <button id="playButton" class="cb-btn primary" title="[Space]">Play</button>
+          <button id="playButton" class="cb-btn primary" title="[Space]" aria-pressed="false">Play</button>
           <button id="resetButton" class="cb-btn icon-btn" title="[R]" aria-label="Reset">Reset</button>
         </div>
         <div class="cb-sep"></div>
@@ -83,9 +83,9 @@
         </div>
         <div class="cb-sep"></div>
         <div class="cb-group mode-tabs" aria-label="Human action mode">
-          <button class="mode active" data-mode="move" title="[M]">Move</button>
-          <button class="mode" data-mode="H" title="[H]">Wall H</button>
-          <button class="mode" data-mode="V" title="[V]">Wall V</button>
+          <button class="mode active" data-mode="move" title="[M]" aria-pressed="true">Move</button>
+          <button class="mode" data-mode="H" title="[H]" aria-pressed="false">Wall H</button>
+          <button class="mode" data-mode="V" title="[V]" aria-pressed="false">Wall V</button>
         </div>
         <div class="cb-sep"></div>
         <div class="cb-info">
@@ -98,7 +98,7 @@
         <label class="cb-check"><input id="toggleLegal" type="checkbox" checked /><span>Hints</span></label>
         <label class="cb-check"><input id="toggleWalls" type="checkbox" checked /><span>Walls</span></label>
         <div class="cb-sep"></div>
-        <button class="cb-btn" id="drawerToggle" title="[L]">Log</button>
+        <button class="cb-btn" id="drawerToggle" title="[L]" aria-expanded="false" aria-controls="drawer">Log</button>
       </div>
 
       <div class="tl-strip">
@@ -107,7 +107,7 @@
       </div>
     </main>
 
-    <aside class="drawer" id="drawer">
+    <aside class="drawer" id="drawer" aria-label="Tactical log">
       <div class="dr-header">
         <span class="dr-title">Tactical Log</span>
         <button class="dr-close" id="drawerClose" aria-label="Close log">x</button>

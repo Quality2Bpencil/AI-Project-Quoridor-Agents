@@ -5,6 +5,7 @@ from pathlib import Path
 from experiments.run_ablation import summarize_rows
 from quoridor.agents import GreedyBFSAgent, RandomAgent
 from quoridor.evaluation import AgentSpec, play_game, run_round_robin, update_elo
+from quoridor.evaluation.metrics import _is_trap_condition, _update_trap_metrics
 
 
 class EvaluationTests(unittest.TestCase):
@@ -78,6 +79,43 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(summary[0]["games"], 2)
         self.assertEqual(summary[0]["adversary_win_rate"], 0.5)
         self.assertEqual(summary[0]["avg_trap_events"], 1.0)
+
+    def test_trap_condition_requires_low_diversity_and_path_increase(self):
+        initial_paths = (8, 8)
+
+        self.assertFalse(_is_trap_condition((8, 8), (2, 1), initial_paths, 1))
+        self.assertFalse(_is_trap_condition((8, 10), (2, 2), initial_paths, 1))
+        self.assertTrue(_is_trap_condition((8, 10), (2, 1), initial_paths, 1))
+
+    def test_trap_events_only_count_new_trap_transitions(self):
+        min_diversity = [2, 2]
+        trap_counts = [0, 0]
+        initial_paths = (8, 8)
+
+        _update_trap_metrics(
+            acting_player=0,
+            initial_paths=initial_paths,
+            previous_paths=(8, 8),
+            previous_diversity=(2, 2),
+            current_paths=(8, 10),
+            current_diversity=(2, 1),
+            min_diversity=min_diversity,
+            trap_counts=trap_counts,
+        )
+        self.assertEqual(trap_counts, [1, 0])
+        self.assertEqual(min_diversity, [2, 1])
+
+        _update_trap_metrics(
+            acting_player=0,
+            initial_paths=initial_paths,
+            previous_paths=(8, 10),
+            previous_diversity=(2, 1),
+            current_paths=(8, 11),
+            current_diversity=(2, 1),
+            min_diversity=min_diversity,
+            trap_counts=trap_counts,
+        )
+        self.assertEqual(trap_counts, [1, 0])
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import unittest
 
 from quoridor import QuoridorEnv
 from quoridor.agents import (
+    CounterfactualTrapAgent,
     DepthTrapAgent,
     GreedyBFSAgent,
     MCTSAgent,
@@ -48,6 +49,18 @@ class SearchAgentTests(unittest.TestCase):
     def test_rollout_poison_returns_legal_action(self):
         self.assert_agent_returns_legal_action(
             RolloutPoisonAgent(seed=0, action_limit=4, wall_limit=2, victim_action_limit=3, rollout_depth=1)
+        )
+
+    def test_counterfactual_trap_returns_legal_action(self):
+        self.assert_agent_returns_legal_action(
+            CounterfactualTrapAgent(
+                seed=0,
+                action_limit=4,
+                wall_limit=2,
+                victim_action_limit=3,
+                response_width=2,
+                followup_limit=3,
+            )
         )
 
     def test_path_distance_allows_zero_at_goal(self):

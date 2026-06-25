@@ -68,12 +68,25 @@ def play_game(
             if action not in legal_actions:
                 disqualified = player
                 break
+            previous_paths = _path_lengths(env)
+            previous_diversity = _path_diversities(env)
             env.step(action)
             if isinstance(action, MoveAction):
                 move_counts[player] += 1
             elif isinstance(action, WallAction):
                 wall_counts[player] += 1
-            _update_trap_metrics(env, player, initial_paths, min_diversity, trap_counts)
+            current_paths = _path_lengths(env)
+            current_diversity = _path_diversities(env)
+            _update_trap_metrics(
+                acting_player=player,
+                initial_paths=initial_paths,
+                previous_paths=previous_paths,
+                previous_diversity=previous_diversity,
+                current_paths=current_paths,
+                current_diversity=current_diversity,
+                min_diversity=min_diversity,
+                trap_counts=trap_counts,
+            )
             if record_actions:
                 action_log.append(repr(action))
         except Exception:
@@ -119,17 +132,30 @@ def _path_diversities(env: QuoridorEnv) -> tuple[int, int]:
 
 
 def _update_trap_metrics(
-    env: QuoridorEnv,
+    *,
     acting_player: int,
     initial_paths: tuple[int, int],
+    previous_paths: tuple[int, int],
+    previous_diversity: tuple[int, int],
+    current_paths: tuple[int, int],
+    current_diversity: tuple[int, int],
     min_diversity: list[int],
     trap_counts: list[int],
 ) -> None:
-    current_diversity = list(_path_diversities(env))
     min_diversity[0] = min(min_diversity[0], current_diversity[0])
     min_diversity[1] = min(min_diversity[1], current_diversity[1])
 
     opponent = 1 - acting_player
-    current_paths = _path_lengths(env)
-    if current_diversity[opponent] <= 1 and current_paths[opponent] >= initial_paths[opponent] + 1:
+    was_trapped = _is_trap_condition(previous_paths, previous_diversity, initial_paths, opponent)
+    is_trapped = _is_trap_condition(current_paths, current_diversity, initial_paths, opponent)
+    if is_trapped and not was_trapped:
         trap_counts[acting_player] += 1
+
+
+def _is_trap_condition(
+    path_lengths: tuple[int, int],
+    path_diversity_values: tuple[int, int],
+    initial_paths: tuple[int, int],
+    player: int,
+) -> bool:
+    return path_diversity_values[player] <= 1 and path_lengths[player] >= initial_paths[player] + 1

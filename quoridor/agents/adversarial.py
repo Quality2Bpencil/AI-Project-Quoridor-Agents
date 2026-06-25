@@ -10,6 +10,7 @@ from quoridor.agents.heuristics import (
     action_sort_key,
     evaluate_action,
     evaluate_state,
+    path_distance,
     path_diversity,
     ranked_actions,
 )
@@ -219,6 +220,127 @@ class RolloutPoisonAgent:
         best_value = max(score(action)[0] for action in candidates)
         best_actions = [action for action in candidates if score(action)[0] == best_value]
         return self.rng.choice(sorted(best_actions, key=action_sort_key))
+
+
+class CounterfactualTrapAgent:
+    """Robust trap policy scored against several plausible victim responses."""
+
+    def __init__(
+        self,
+        seed: int | None = None,
+        victim: object | None = None,
+        action_limit: int = 18,
+        wall_limit: int = 10,
+        wall_radius: int = 2,
+        victim_action_limit: int = 8,
+        response_width: int = 2,
+        followup_limit: int = 6,
+        trap_weight: float = 7.0,
+        path_delta_weight: float = 2.5,
+        followup_weight: float = 0.35,
+    ) -> None:
+        self.rng = random.Random(seed)
+        self.victim = victim
+        self.action_limit = action_limit
+        self.wall_limit = wall_limit
+        self.wall_radius = wall_radius
+        self.victim_action_limit = victim_action_limit
+        self.response_width = max(1, response_width)
+        self.followup_limit = followup_limit
+        self.trap_weight = trap_weight
+        self.path_delta_weight = path_delta_weight
+        self.followup_weight = followup_weight
+
+    def choose_action(self, state: QuoridorState, legal_actions: Sequence[Action]) -> Action:
+        if not legal_actions:
+            raise ValueError("CounterfactualTrapAgent received no legal actions")
+
+        player = state.current_player
+        opponent = 1 - player
+        candidates = _candidate_actions(
+            state,
+            legal_actions,
+            action_limit=self.action_limit,
+            wall_limit=self.wall_limit,
+            wall_radius=self.wall_radius,
+        )
+
+        scored = [(self._score_action(state, action, player, opponent), action) for action in candidates]
+        best_value = max(value for value, _ in scored)
+        best_actions = [action for value, action in scored if value == best_value]
+        return self.rng.choice(sorted(best_actions, key=action_sort_key))
+
+    def _score_action(self, state: QuoridorState, action: Action, player: int, opponent: int) -> float:
+        before_opponent_path = path_distance(state, opponent)
+        try:
+            after_ours = apply_action(state, action)
+        except ValueError:
+            return -100_000.0
+        if after_ours.done:
+            return evaluate_state(after_ours, player)
+
+        responses = self._plausible_responses(after_ours)
+        if not responses:
+            return evaluate_state(after_ours, player)
+
+        outcomes: list[float] = []
+        for response in responses:
+            try:
+                after_response = apply_action(after_ours, response)
+            except ValueError:
+                continue
+            immediate = evaluate_state(after_response, player)
+            trap_bonus = self._trap_bonus(after_response, opponent, before_opponent_path)
+            followup_bonus = self._followup_bonus(after_response, player, immediate)
+            outcomes.append(immediate + trap_bonus + followup_bonus)
+
+        return min(outcomes) if outcomes else -100_000.0
+
+    def _plausible_responses(self, state: QuoridorState) -> list[Action]:
+        actions = ranked_actions(
+            state,
+            max_actions=self.victim_action_limit,
+            wall_limit=self.wall_limit,
+            wall_radius=self.wall_radius,
+        )
+        if not actions:
+            return []
+
+        responses: list[Action] = []
+        choose_action = getattr(self.victim, "choose_action", None)
+        if choose_action is not None:
+            try:
+                chosen = choose_action(state, actions)
+                if chosen in actions:
+                    responses.append(chosen)
+            except Exception:
+                pass
+
+        for action in actions:
+            if action not in responses:
+                responses.append(action)
+            if len(responses) >= self.response_width:
+                break
+        return responses
+
+    def _trap_bonus(self, state: QuoridorState, opponent: int, before_opponent_path: int) -> float:
+        opponent_path = path_distance(state, opponent)
+        opponent_diversity = path_diversity(state, opponent)
+        path_delta = max(0, opponent_path - before_opponent_path)
+        transition_bonus = self.trap_weight if path_delta > 0 and opponent_diversity <= 1 else 0.0
+        return self.path_delta_weight * path_delta + transition_bonus
+
+    def _followup_bonus(self, state: QuoridorState, player: int, immediate: float) -> float:
+        followups = ranked_actions(
+            state,
+            max_actions=self.followup_limit,
+            wall_limit=min(self.wall_limit, self.followup_limit),
+            wall_radius=self.wall_radius,
+        )
+        if not followups:
+            return 0.0
+        best_followup = max(evaluate_action(state, followup, player) for followup in followups)
+        return self.followup_weight * max(0.0, best_followup - immediate)
 
 
 def _candidate_actions(

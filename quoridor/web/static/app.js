@@ -3,7 +3,9 @@ import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { Pass, FullScreenQuad } from "three/addons/postprocessing/Pass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 
 /* ═══════════════════════════════════════════════════
    Constants
@@ -12,6 +14,7 @@ const N = 9, TILE = 0.95, GAP = 0.12, SP = TILE + GAP, HALF = 4;
 const FRAME_PAD = 0.55, BOARD_SPAN = N * SP, FRAME_SZ = BOARD_SPAN + FRAME_PAD * 2;
 const TILE_H = 0.14, FRAME_H = 0.38, WALL_H = 0.55;
 const WALL_LEN = 2 * TILE + GAP, WALL_THICK = 0.13, PAWN_SCALE = 0.1;
+const PAWN_OUTLINE_LAYER = 2;
 
 const C = {
   bg: 0x122033,
@@ -20,6 +23,7 @@ const C = {
   wallP0: 0xd88a22, wallP1: 0xd88a22,
   pawnP0: 0xf0d49a, pawnP1: 0x242934,
   legal: 0x58c2ab, pathP0: 0xf2c868, pathP1: 0x737f96,
+  danger: 0xb45a48,
 };
 
 function g2w(r, c) { return [(c - HALF) * SP, (r - HALF) * SP]; }
@@ -27,11 +31,12 @@ function g2w(r, c) { return [(c - HALF) * SP, (r - HALF) * SP]; }
 /* ═══════════════════════════════════════════════════
    Three.js globals
    ═══════════════════════════════════════════════════ */
-let scene, camera, renderer, composer, controls;
+let scene, camera, renderer, composer, controls, pawnOutlinePass;
 let boardGroup, wallGroup, hintGroup, tileMeshes = [], wallMeshes = {};
-let pawnMeshes = [null, null], pawnGeo = null;
-let legalOvl = [], pathOvl = [], wallGhosts = [], currentState = null;
+let pawnMeshes = [null, null], pawnOutlines = [null, null], pawnGeo = null;
+let legalOvl = [], pathOvl = [], currentState = null;
 let hoverTarget = null;
+let wallPreview = null, wallPreviewState = null;
 
 /* ═══════════════════════════════════════════════════
    Procedural wood texture
@@ -40,23 +45,60 @@ function woodTex(base, grain, w = 256, h = 256) {
   const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
   const cx = cv.getContext("2d");
   cx.fillStyle = base; cx.fillRect(0, 0, w, h);
-  cx.globalAlpha = 0.22; cx.strokeStyle = grain;
-  for (let y = 0; y < h; y += 2 + Math.random() * 5) {
-    cx.lineWidth = 0.5 + Math.random() * 0.8; cx.beginPath(); cx.moveTo(0, y);
-    let x = 0; while (x < w) { x += 8 + Math.random() * 18; cx.lineTo(x, y + (Math.random() - .5) * 3); }
+  cx.globalAlpha = 0.34; cx.strokeStyle = grain;
+  for (let y = 0; y < h; y += 3 + Math.random() * 7) {
+    cx.lineWidth = 0.7 + Math.random() * 1.2; cx.beginPath(); cx.moveTo(0, y);
+    let x = 0; while (x < w) { x += 10 + Math.random() * 22; cx.lineTo(x, y + (Math.random() - .5) * 5); }
     cx.stroke();
+  }
+  cx.globalAlpha = 0.22; cx.strokeStyle = "#3b210e";
+  for (let y = 8; y < h; y += 18 + Math.random() * 24) {
+    cx.lineWidth = 1.2; cx.beginPath(); cx.moveTo(0, y);
+    let x = 0; while (x < w) { x += 14 + Math.random() * 30; cx.lineTo(x, y + (Math.random() - .5) * 7); }
+    cx.stroke();
+  }
+  cx.globalAlpha = 0.18;
+  for (let i = 0; i < 16; i++) {
+    const x = Math.random() * w, y = Math.random() * h;
+    cx.beginPath(); cx.ellipse(x, y, 7 + Math.random() * 13, 1.5 + Math.random() * 3, Math.random() * 0.5, 0, Math.PI * 2);
+    cx.fillStyle = i % 2 ? "#f5c06b" : "#4a2a13";
+    cx.fill();
   }
   cx.globalAlpha = 1;
   const id = cx.getImageData(0, 0, w, h);
   for (let i = 0; i < id.data.length; i += 4) {
-    const n = (Math.random() - .5) * 10;
+    const n = (Math.random() - .5) * 16;
     id.data[i] = Math.min(255, Math.max(0, id.data[i] + n));
     id.data[i + 1] = Math.min(255, Math.max(0, id.data[i + 1] + n));
     id.data[i + 2] = Math.min(255, Math.max(0, id.data[i + 2] + n));
   }
   cx.putImageData(id, 0, 0);
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestMipmapNearestFilter;
+  return t;
 }
+
+function toonRamp(colors) {
+  const cv = document.createElement("canvas");
+  cv.width = colors.length;
+  cv.height = 1;
+  const cx = cv.getContext("2d");
+  colors.forEach((color, i) => {
+    cx.fillStyle = color;
+    cx.fillRect(i, 0, 1, 1);
+  });
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  return t;
+}
+
+const pawnToonRamp = toonRamp(["#16120d", "#6b5334", "#c79f62", "#ffe4a4"]);
+const darkPawnToonRamp = toonRamp(["#07080c", "#202633", "#545d70", "#bac0cc"]);
 
 /* ═══════════════════════════════════════════════════
    Post-processing: pixel blocks, quantized color, screen-space edges
@@ -65,9 +107,10 @@ const PixelBoardShader = {
   uniforms: {
     tDiffuse: { value: null },
     resolution: { value: new THREE.Vector2() },
-    pixelSize: { value: 1.65 },
-    colorSteps: { value: 16.0 },
-    outlineStrength: { value: 0.22 },
+    pixelSize: { value: 1.0 },
+    colorSteps: { value: 64.0 },
+    posterizeMix: { value: 0.16 },
+    outlineStrength: { value: 0.0 },
   },
   vertexShader: `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
   fragmentShader: `
@@ -75,6 +118,7 @@ const PixelBoardShader = {
     uniform vec2 resolution;
     uniform float pixelSize;
     uniform float colorSteps;
+    uniform float posterizeMix;
     uniform float outlineStrength;
     varying vec2 vUv;
     float lum(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}
@@ -89,15 +133,143 @@ const PixelBoardShader = {
       e=max(e,abs(l-lum(pow(max(texture2D(tDiffuse,c-vec2(dxy.x,0.0)).rgb,0.0),vec3(1.0/2.2)))));
       e=max(e,abs(l-lum(pow(max(texture2D(tDiffuse,c+vec2(0.0,dxy.y)).rgb,0.0),vec3(1.0/2.2)))));
       e=max(e,abs(l-lum(pow(max(texture2D(tDiffuse,c-vec2(0.0,dxy.y)).rgb,0.0),vec3(1.0/2.2)))));
-      float edge=smoothstep(0.14,0.34,e)*outlineStrength;
-      col=floor(col*colorSteps+0.5)/colorSteps;
-      col=clamp(col*1.025,0.0,1.0);
+      float edge=smoothstep(0.07,0.19,e)*outlineStrength;
+      vec3 stepped=floor(col*colorSteps+0.5)/colorSteps;
+      col=mix(col,stepped,posterizeMix);
+      col=clamp(col*1.04,0.0,1.0);
       float d=distance(vUv,vec2(0.5));
       col*=smoothstep(1.05,0.38,d);
-      col=mix(col,vec3(0.025,0.025,0.03),edge);
+      col=mix(col,vec3(0.012,0.011,0.010),edge);
       gl_FragColor=vec4(col,1.0);
     }`,
 };
+
+class PawnSilhouetteOutlinePass extends Pass {
+  constructor(sceneRef, cameraRef, getObjects) {
+    super();
+    this.scene = sceneRef;
+    this.camera = cameraRef;
+    this.getObjects = getObjects;
+    this.needsSwap = true;
+    this.maskMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      side: THREE.FrontSide,
+    });
+    this.maskTarget = new THREE.WebGLRenderTarget(1, 1, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat,
+      type: THREE.UnsignedByteType,
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+    this.maskTarget.texture.name = "PawnSilhouetteMask";
+    this.maskTarget.samples = 4;
+    this.copyColor = new THREE.Color();
+    this.compositeMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null },
+        tMask: { value: this.maskTarget.texture },
+        resolution: { value: new THREE.Vector2(1, 1) },
+        outlineColor: { value: new THREE.Color(0x030303) },
+        outlinePixels: { value: 3.3 },
+        opacity: { value: 1.0 },
+      },
+      depthTest: false,
+      depthWrite: false,
+      vertexShader: `varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}`,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform sampler2D tMask;
+        uniform vec2 resolution;
+        uniform vec3 outlineColor;
+        uniform float outlinePixels;
+        uniform float opacity;
+        varying vec2 vUv;
+
+        float maskAt(vec2 uv) {
+          return texture2D(tMask, clamp(uv, vec2(0.0), vec2(1.0))).r;
+        }
+
+        void main() {
+          vec4 sceneColor = texture2D(tDiffuse, vUv);
+          vec2 px = 1.0 / resolution;
+          float center = maskAt(vUv);
+          float r0 = outlinePixels * 0.45;
+          float r1 = outlinePixels;
+          float d = 0.70710678;
+
+          float expanded = 0.0;
+          expanded = max(expanded, maskAt(vUv + vec2( r0, 0.0) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(-r0, 0.0) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(0.0,  r0) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(0.0, -r0) * px));
+          expanded = max(expanded, maskAt(vUv + vec2( r0 * d,  r0 * d) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(-r0 * d,  r0 * d) * px));
+          expanded = max(expanded, maskAt(vUv + vec2( r0 * d, -r0 * d) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(-r0 * d, -r0 * d) * px));
+          expanded = max(expanded, maskAt(vUv + vec2( r1, 0.0) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(-r1, 0.0) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(0.0,  r1) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(0.0, -r1) * px));
+          expanded = max(expanded, maskAt(vUv + vec2( r1 * d,  r1 * d) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(-r1 * d,  r1 * d) * px));
+          expanded = max(expanded, maskAt(vUv + vec2( r1 * d, -r1 * d) * px));
+          expanded = max(expanded, maskAt(vUv + vec2(-r1 * d, -r1 * d) * px));
+
+          float outside = 1.0 - smoothstep(0.03, 0.26, center);
+          float ring = smoothstep(0.08, 0.62, expanded) * outside * opacity;
+          gl_FragColor = vec4(mix(sceneColor.rgb, outlineColor, ring), sceneColor.a);
+        }
+      `,
+    });
+    this.fsQuad = new FullScreenQuad(this.compositeMaterial);
+  }
+
+  setSize(width, height) {
+    this.maskTarget.setSize(width, height);
+    this.compositeMaterial.uniforms.resolution.value.set(width, height);
+  }
+
+  render(rendererRef, writeBuffer, readBuffer) {
+    const objects = this.getObjects().filter(Boolean);
+    objects.forEach((obj) => obj.layers.enable(PAWN_OUTLINE_LAYER));
+
+    const oldTarget = rendererRef.getRenderTarget();
+    rendererRef.getClearColor(this.copyColor);
+    const oldClearAlpha = rendererRef.getClearAlpha();
+    const oldAutoClear = rendererRef.autoClear;
+    const oldOverride = this.scene.overrideMaterial;
+    const oldCameraLayers = this.camera.layers.mask;
+
+    rendererRef.autoClear = true;
+    this.scene.overrideMaterial = this.maskMaterial;
+    this.camera.layers.set(PAWN_OUTLINE_LAYER);
+    rendererRef.setRenderTarget(this.maskTarget);
+    rendererRef.setClearColor(0x000000, 0);
+    rendererRef.clear(true, true, true);
+    rendererRef.render(this.scene, this.camera);
+
+    this.camera.layers.mask = oldCameraLayers;
+    this.scene.overrideMaterial = oldOverride;
+    rendererRef.setClearColor(this.copyColor, oldClearAlpha);
+    rendererRef.autoClear = oldAutoClear;
+    rendererRef.setRenderTarget(oldTarget);
+
+    this.compositeMaterial.uniforms.tDiffuse.value = readBuffer.texture;
+    this.compositeMaterial.uniforms.tMask.value = this.maskTarget.texture;
+    rendererRef.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    if (this.clear) rendererRef.clear();
+    this.fsQuad.render(rendererRef);
+  }
+
+  dispose() {
+    this.maskTarget.dispose();
+    this.maskMaterial.dispose();
+    this.compositeMaterial.dispose();
+    this.fsQuad.dispose();
+  }
+}
 
 /* ═══════════════════════════════════════════════════
    Scene init
@@ -116,6 +288,7 @@ function initScene(container) {
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(C.bg);
+  scene.layers.enable(PAWN_OUTLINE_LAYER);
 
   camera = new THREE.PerspectiveCamera(32, container.clientWidth / container.clientHeight, 0.1, 100);
   camera.position.set(0, 13.8, 9.2);
@@ -152,6 +325,9 @@ function initScene(container) {
   const pixelPass = new ShaderPass(PixelBoardShader);
   pixelPass.uniforms.resolution.value.set(container.clientWidth, container.clientHeight);
   composer.addPass(pixelPass);
+  pawnOutlinePass = new PawnSilhouetteOutlinePass(scene, camera, () => pawnMeshes);
+  pawnOutlinePass.setSize(container.clientWidth, container.clientHeight);
+  composer.addPass(pawnOutlinePass);
 
   buildBoard();
   loadPawn();
@@ -161,6 +337,7 @@ function initScene(container) {
     const w = container.clientWidth, h = container.clientHeight;
     camera.aspect = w / h; camera.updateProjectionMatrix();
     renderer.setSize(w, h); composer.setSize(w, h);
+    pawnOutlinePass.setSize(w, h);
     pixelPass.uniforms.resolution.value.set(w, h);
   });
 
@@ -232,33 +409,88 @@ function loadPawn() {
   new OBJLoader().load("/models/pawn/pawn.obj", (obj) => {
     obj.traverse((child) => {
       if (child.isMesh) {
-        const geo = child.geometry.clone();
+        let geo = child.geometry.clone();
         geo.computeBoundingBox();
         const bb = geo.boundingBox;
         geo.translate(-(bb.min.x + bb.max.x) / 2, -(bb.min.y + bb.max.y) / 2, -bb.min.z);
         geo.rotateX(-Math.PI / 2);
         geo.scale(PAWN_SCALE, PAWN_SCALE, PAWN_SCALE);
+        geo = mergeVertices(geo, 0.0001);
         geo.computeVertexNormals();
         pawnGeo = geo;
       }
     });
-    if (pawnMeshes[0]) { pawnMeshes[0].geometry.dispose(); pawnMeshes[0].geometry = pawnGeo; }
-    if (pawnMeshes[1]) { pawnMeshes[1].geometry.dispose(); pawnMeshes[1].geometry = pawnGeo; }
+    syncPawnGeometry(0);
+    syncPawnGeometry(1);
     if (currentState) syncPawns(currentState);
   });
+}
+
+function outlineMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      outlineColor: { value: new THREE.Color(0x030303) },
+      outlineThickness: { value: 0.04 },
+    },
+    vertexShader: `
+      uniform float outlineThickness;
+      void main() {
+        vec3 expanded = position + normalize(normal) * outlineThickness;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(expanded, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 outlineColor;
+      void main() {
+        gl_FragColor = vec4(outlineColor, 1.0);
+      }
+    `,
+    side: THREE.BackSide,
+    depthTest: true,
+    depthWrite: false,
+  });
+}
+
+function syncPawnGeometry(p) {
+  if (!pawnMeshes[p] || !pawnGeo) return;
+  pawnMeshes[p].geometry.dispose();
+  pawnMeshes[p].geometry = pawnGeo;
+  ensurePawnOutline(p, pawnMeshes[p], pawnGeo);
+}
+
+function ensurePawnOutline(p, pawn, geo) {
+  // Kept as a disabled fallback; the active outline uses a screen-space
+  // silhouette mask so OBJ normal seams do not create noisy hull spikes.
+  if (!pawnOutlines[p]) {
+    const outline = new THREE.Mesh(geo.clone(), outlineMaterial());
+    outline.scale.setScalar(1.075);
+    outline.visible = false;
+    outline.renderOrder = 0;
+    pawn.add(outline);
+    pawnOutlines[p] = outline;
+    return outline;
+  }
+  pawnOutlines[p].geometry.dispose();
+  pawnOutlines[p].geometry = geo.clone();
+  pawnOutlines[p].scale.setScalar(1.075);
+  pawnOutlines[p].visible = false;
+  return pawnOutlines[p];
 }
 
 function ensurePawn(p) {
   if (pawnMeshes[p]) return pawnMeshes[p];
   const geo = pawnGeo || new THREE.SphereGeometry(0.28, 16, 12);
-  const mat = new THREE.MeshStandardMaterial({
+  const mat = new THREE.MeshToonMaterial({
     color: p === 0 ? C.pawnP0 : C.pawnP1,
-    roughness: p === 0 ? 0.62 : 0.35,
-    metalness: p === 0 ? 0.0 : 0.18,
-    emissive: p === 1 ? 0x0a0d14 : 0x000000,
-    flatShading: true,
+    gradientMap: p === 0 ? pawnToonRamp : darkPawnToonRamp,
+    emissive: p === 1 ? 0x06080e : 0x1b1207,
+    emissiveIntensity: p === 1 ? 0.18 : 0.08,
   });
+  mat.flatShading = false;
   const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = 1;
+  m.layers.enable(PAWN_OUTLINE_LAYER);
+  ensurePawnOutline(p, m, geo);
   m.castShadow = true; m.receiveShadow = true;
   scene.add(m); pawnMeshes[p] = m; return m;
 }
@@ -269,8 +501,84 @@ function ensurePawn(p) {
 const wallGeo = new THREE.BoxGeometry(WALL_LEN, WALL_H, WALL_THICK);
 const wTexP0 = woodTex("#d88a22", "#f0b94e");
 const wTexP1 = woodTex("#d88a22", "#9c5518");
+const wallEdgesGeo = new THREE.EdgesGeometry(wallGeo);
 
 function wKey(w) { return `${w.orientation}:${w.row}:${w.col}`; }
+
+function wallEdgeLines(opacity = 0.72) {
+  return new THREE.LineSegments(
+    wallEdgesGeo,
+    new THREE.LineBasicMaterial({
+      color: 0x090604,
+      transparent: true,
+      opacity,
+      depthTest: true,
+    }),
+  );
+}
+
+function ensureWallPreview() {
+  if (wallPreview) return wallPreview;
+
+  const group = new THREE.Group();
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: C.legal,
+    transparent: true,
+    opacity: 0.56,
+    depthWrite: false,
+  });
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(WALL_LEN + 0.18, 0.035, WALL_THICK + 0.34), glowMat);
+  glow.position.y = 0.02;
+
+  const wallMat = new THREE.MeshStandardMaterial({
+    map: wTexP0.clone(),
+    color: C.wallP0,
+    roughness: 0.66,
+    metalness: 0.02,
+    emissive: 0x1c0e05,
+    emissiveIntensity: 0.06,
+    transparent: true,
+    opacity: 1.0,
+    flatShading: true,
+  });
+  const wall = new THREE.Mesh(wallGeo.clone(), wallMat);
+  wall.position.y = WALL_H / 2 + 0.08;
+  wall.scale.set(1.03, 1.08, 1.08);
+  wall.castShadow = true;
+  wall.receiveShadow = true;
+  wall.add(wallEdgeLines(0.9));
+
+  group.add(glow);
+  group.add(wall);
+  group.visible = false;
+  hintGroup.add(group);
+
+  wallPreview = { group, wall, glow, wallMat, glowMat };
+  return wallPreview;
+}
+
+function setWallPreview(snap) {
+  const preview = ensureWallPreview();
+  wallPreviewState = snap;
+  if (!snap) {
+    preview.group.visible = false;
+    return;
+  }
+
+  const [x, z] = g2w(snap.row + 0.5, snap.col + 0.5);
+  preview.group.position.set(x, TILE_H + 0.065, z);
+  preview.group.rotation.y = snap.orientation === "V" ? Math.PI / 2 : 0;
+  preview.group.visible = true;
+
+  const color = snap.valid ? C.legal : C.danger;
+  preview.glowMat.color.setHex(color);
+  preview.glowMat.opacity = snap.valid ? 0.5 : 0.24;
+  preview.wallMat.color.setHex(snap.valid ? C.wallP0 : 0x875746);
+  preview.wallMat.emissive.setHex(snap.valid ? 0x1c0e05 : color);
+  preview.wallMat.emissiveIntensity = snap.valid ? 0.06 : 0.08;
+  preview.wallMat.opacity = snap.valid ? 1.0 : 0.42;
+  preview.wall.position.y = snap.valid ? WALL_H / 2 + 0.1 : WALL_H / 2 - 0.04;
+}
 
 function syncWalls(data) {
   const cur = new Set(data.walls.map(wKey));
@@ -284,6 +592,7 @@ function syncWalls(data) {
     const color = w.owner === 0 ? C.wallP0 : C.wallP1;
     const mat = new THREE.MeshStandardMaterial({ map: tex.clone(), color, roughness: 0.72, metalness: 0.02, flatShading: true });
     const m = new THREE.Mesh(wallGeo, mat);
+    m.add(wallEdgeLines(0.78));
     const [x, z] = g2w(w.row + .5, w.col + .5);
     m.position.set(x, TILE_H + 0.02 + WALL_H / 2, z);
     if (w.orientation === "V") m.rotation.y = Math.PI / 2;
@@ -340,17 +649,12 @@ function clearOvl() {
   legalOvl = [];
   pathOvl.forEach((m) => { boardGroup.remove(m); m.geometry.dispose(); m.material.dispose(); });
   pathOvl = [];
-  wallGhosts.forEach((m) => { hintGroup.remove(m); m.geometry.dispose(); m.material.dispose(); });
-  wallGhosts = [];
+  setWallPreview(null);
   hoverTarget = null;
 }
 
 function showLegal(data) {
-  if (!el.toggleLegal.checked) return;
-  if (ui.mode !== "move") {
-    showWallHints(data);
-    return;
-  }
+  if (!el.toggleLegal.checked || ui.mode !== "move") return;
   const geo = new THREE.PlaneGeometry(TILE * 0.58, TILE * 0.58);
   data.legalMoves.forEach(([r, c]) => {
     const mat = new THREE.MeshBasicMaterial({ color: C.legal, transparent: true, opacity: 0.42, side: THREE.DoubleSide });
@@ -360,31 +664,6 @@ function showLegal(data) {
     m.userData = { row: r, col: c, type: "legal" };
     boardGroup.add(m); legalOvl.push(m);
   });
-}
-
-function showWallHints(data) {
-  const orientation = ui.mode;
-  data.legalWalls
-    .filter((w) => w.orientation === orientation)
-    .forEach((w) => {
-      const mat = new THREE.MeshStandardMaterial({
-        color: C.legal,
-        transparent: true,
-        opacity: 0.2,
-        roughness: 0.76,
-        metalness: 0.0,
-        flatShading: true,
-        depthWrite: false,
-      });
-      const m = new THREE.Mesh(wallGeo.clone(), mat);
-      const [x, z] = g2w(w.row + 0.5, w.col + 0.5);
-      m.position.set(x, TILE_H + 0.06 + WALL_H / 2, z);
-      if (w.orientation === "V") m.rotation.y = Math.PI / 2;
-      m.scale.y = 0.28;
-      m.userData = { type: "wall-ghost", orientation: w.orientation, row: w.row, col: w.col };
-      hintGroup.add(m);
-      wallGhosts.push(m);
-    });
 }
 
 function showPaths(data) {
@@ -427,28 +706,34 @@ function pickInteractive(event, container) {
   const p = currentState.currentPlayer;
   if (currentState.playerTypes[p] !== "Human") return null;
 
-  const rect = container.getBoundingClientRect();
-  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
+  setRayFromEvent(event, container);
 
   if (ui.mode === "move") {
     const hits = raycaster.intersectObjects(legalOvl, false);
     return hits.length ? hits[0].object : null;
   }
-  const hits = raycaster.intersectObjects(wallGhosts, false);
-  return hits.length ? hits[0].object : null;
+  return snapWallFromEvent(event, container);
 }
 
 function updateHover(event, container) {
+  if (ui.mode !== "move") {
+    const snap = pickInteractive(event, container);
+    setHover(null, container);
+    setWallPreview(snap);
+    container.style.cursor = snap?.valid ? "pointer" : snap ? "not-allowed" : "";
+    return;
+  }
+  setWallPreview(null);
   setHover(pickInteractive(event, container), container);
 }
 
 function setHover(target, container) {
   if (hoverTarget === target) return;
   if (hoverTarget?.material) {
-    hoverTarget.material.opacity = hoverTarget.userData.type === "wall-ghost" ? 0.2 : 0.42;
-    hoverTarget.scale.set(hoverTarget.scale.x, hoverTarget.userData.type === "wall-ghost" ? 0.28 : 1, hoverTarget.scale.z);
+    const baseOpacity = hoverTarget.userData.baseOpacity ?? 0.42;
+    const baseScaleY = hoverTarget.userData.baseScaleY ?? 1;
+    hoverTarget.material.opacity = baseOpacity;
+    hoverTarget.scale.set(hoverTarget.scale.x, baseScaleY, hoverTarget.scale.z);
   }
   hoverTarget = target;
   if (hoverTarget?.material) {
@@ -470,24 +755,45 @@ function handleClick(event, container) {
       apiPost("/api/human-action", { type: "move", row, col }).then(handleState);
     }
   } else {
-    if (target) {
-      const { orientation, row, col } = target.userData;
+    if (target?.valid) {
+      const { orientation, row, col } = target;
       apiPost("/api/human-action", { type: "wall", orientation, row, col }).then(handleState);
       return;
     }
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(TILE_H + 0.02));
-    const pt = new THREE.Vector3();
-    raycaster.ray.intersectPlane(plane, pt);
-    if (!pt) return;
-    const wr = Math.round(pt.z / SP + HALF - 0.5);
-    const wc = Math.round(pt.x / SP + HALF - 0.5);
-    const ori = ui.mode;
-    if (wr >= 0 && wr < N - 1 && wc >= 0 && wc < N - 1) {
-      if (currentState.legalWalls.some((w) => w.orientation === ori && w.row === wr && w.col === wc)) {
-        apiPost("/api/human-action", { type: "wall", orientation: ori, row: wr, col: wc }).then(handleState);
-      }
-    }
+    flashStatus("Illegal wall");
   }
+}
+
+function setRayFromEvent(event, container) {
+  const rect = container.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+}
+
+function boardPointFromEvent(event, container) {
+  setRayFromEvent(event, container);
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(TILE_H + 0.02));
+  const pt = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(plane, pt) ? pt : null;
+}
+
+function snapWallFromEvent(event, container) {
+  const pt = boardPointFromEvent(event, container);
+  if (!pt || ui.mode === "move") return null;
+
+  const row = Math.round(pt.z / SP + HALF - 0.5);
+  const col = Math.round(pt.x / SP + HALF - 0.5);
+  if (row < 0 || row >= N - 1 || col < 0 || col >= N - 1) return null;
+
+  const snap = { orientation: ui.mode, row, col };
+  return { ...snap, valid: isLegalWallSnap(snap) };
+}
+
+function isLegalWallSnap(snap) {
+  return currentState?.legalWalls?.some((w) => (
+    w.orientation === snap.orientation && w.row === snap.row && w.col === snap.col
+  )) ?? false;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -533,6 +839,7 @@ const ui = { mode: "move", speed: 420, playing: false, timer: null, t0: null, tI
 const el = {};
 function cacheEls() {
   ["player0","player1","p0Turn","p1Turn","p0Rack","p1Rack",
+   "panel0","panel1",
    "p0PanelPath","p1PanelPath","p0PanelDiv","p1PanelDiv","p0WallCount","p1WallCount",
    "stepButton","playButton","resetButton","speedPresets",
    "turnMetric","turnMetric2","currentMetric","p0Path","p1Path","p0PathD","p1PathD","p0Diversity","p1Diversity",
@@ -588,6 +895,8 @@ function renderDOM(data) {
   el.p0Turn.textContent = data.currentPlayer === 0 ? "To move" : "Standby";
   el.p1Turn.classList.toggle("active", data.currentPlayer === 1);
   el.p1Turn.textContent = data.currentPlayer === 1 ? "To move" : "Standby";
+  el.panel0.classList.toggle("active-player", data.currentPlayer === 0);
+  el.panel1.classList.toggle("active-player", data.currentPlayer === 1);
 
   if (data.playerTypes) {
     if (el.player0.value !== data.playerTypes[0]) el.player0.value = data.playerTypes[0];
@@ -620,7 +929,17 @@ function renderDOM(data) {
 
   renderTimeline(data);
   renderLog(data);
+  syncControlState(data);
   if (data.done && data.winner !== null) showWinner(data);
+}
+
+function syncControlState(data) {
+  const agentTurn = !data.done && data.playerTypes[data.currentPlayer] !== "Human";
+  el.stepButton.disabled = !agentTurn;
+  el.playButton.disabled = !agentTurn;
+  if (!agentTurn && ui.playing) stopPlay();
+  el.playButton.setAttribute("aria-pressed", String(ui.playing));
+  el.drawerToggle.setAttribute("aria-expanded", String(el.drawer.classList.contains("open")));
 }
 
 function wallRack(c, rem) {
@@ -661,7 +980,7 @@ function showWinner(data) {
   const w = data.winner;
   el.winnerCrown.textContent = "WIN";
   el.winnerTitle.textContent = `Player ${w} Wins!`;
-  el.winnerTitle.style.color = w === 0 ? "var(--p0)" : "var(--p1)";
+  el.winnerTitle.style.color = w === 0 ? "var(--p0)" : "#d6deef";
   el.winnerDetail.textContent = `Completed in ${data.turnCount} turns`;
   el.winnerOverlay.classList.add("visible");
   stopPlay();
@@ -678,9 +997,11 @@ function initControls() {
 
   el.speedPresets.querySelectorAll(".sp-btn").forEach((btn) => {
     if (btn.hasAttribute("data-default")) btn.classList.add("active");
+    btn.setAttribute("aria-pressed", String(btn.classList.contains("active")));
     btn.addEventListener("click", () => {
       ui.speed = parseInt(btn.dataset.ms);
       el.speedPresets.querySelectorAll(".sp-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      el.speedPresets.querySelectorAll(".sp-btn").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
       if (ui.playing) { stopPlay(); startPlay(); }
     });
   });
@@ -695,8 +1016,8 @@ function initControls() {
     cb.addEventListener("change", () => { if (currentState) render(currentState); });
   });
 
-  el.drawerToggle.addEventListener("click", () => el.drawer.classList.toggle("open"));
-  el.drawerClose.addEventListener("click", () => el.drawer.classList.remove("open"));
+  el.drawerToggle.addEventListener("click", () => setDrawerOpen(!el.drawer.classList.contains("open")));
+  el.drawerClose.addEventListener("click", () => setDrawerOpen(false));
 
   initAgents();
 }
@@ -734,6 +1055,7 @@ function startPlay() {
   }
   ui.playing = true;
   el.playButton.textContent = "Pause"; el.playButton.classList.add("playing");
+  el.playButton.setAttribute("aria-pressed", "true");
   if (!ui.t0) { ui.t0 = Date.now(); ui.tInt = setInterval(updateTimer, 1000); }
   tick();
 }
@@ -741,6 +1063,7 @@ function startPlay() {
 function stopPlay() {
   ui.playing = false;
   el.playButton.textContent = "Play"; el.playButton.classList.remove("playing");
+  el.playButton.setAttribute("aria-pressed", "false");
   if (ui.timer) { clearTimeout(ui.timer); ui.timer = null; }
 }
 
@@ -783,15 +1106,24 @@ function initKeyboard() {
       case "m": case "M": setMode("move"); break;
       case "h": setMode("H"); break;
       case "v": setMode("V"); break;
-      case "l": case "L": el.drawer.classList.toggle("open"); break;
+      case "l": case "L": setDrawerOpen(!el.drawer.classList.contains("open")); break;
     }
   });
 }
 
 function setMode(mode) {
   ui.mode = mode;
-  document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+  document.querySelectorAll(".mode").forEach((b) => {
+    const active = b.dataset.mode === mode;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-pressed", String(active));
+  });
   if (currentState) render(currentState);
+}
+
+function setDrawerOpen(open) {
+  el.drawer.classList.toggle("open", open);
+  el.drawerToggle.setAttribute("aria-expanded", String(open));
 }
 
 /* ═══════════════════════════════════════════════════

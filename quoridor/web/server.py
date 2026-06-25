@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 
 from quoridor import MoveAction, QuoridorEnv, WallAction
 from quoridor.agents import (
+    CounterfactualTrapAgent,
     DepthTrapAgent,
     GreedyBFSAgent,
     MCTSAgent,
@@ -51,6 +52,14 @@ AGENT_FACTORIES: dict[str, AgentFactory | None] = {
         wall_limit=3,
         victim_action_limit=4,
         rollout_depth=2,
+    ),
+    "CounterTrap": _factory(
+        CounterfactualTrapAgent,
+        action_limit=6,
+        wall_limit=3,
+        victim_action_limit=4,
+        response_width=2,
+        followup_limit=4,
     ),
 }
 

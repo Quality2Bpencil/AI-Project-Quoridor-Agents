@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from quoridor.agents import (
+    CounterfactualTrapAgent,
     DepthTrapAgent,
     GreedyBFSAgent,
     MCTSAgent,
@@ -68,6 +69,17 @@ def build_specs(preset: str) -> list[AgentSpec]:
                     rollout_depth=1,
                 ),
             ),
+            AgentSpec(
+                "counter_trap",
+                lambda: CounterfactualTrapAgent(
+                    seed=7,
+                    action_limit=4,
+                    wall_limit=2,
+                    victim_action_limit=3,
+                    response_width=2,
+                    followup_limit=3,
+                ),
+            ),
         ]
 
     if preset != "research":
@@ -81,6 +93,7 @@ def build_specs(preset: str) -> list[AgentSpec]:
         AgentSpec("path_lure", lambda: PathLureAgent(seed=4)),
         AgentSpec("depth_trap", lambda: DepthTrapAgent(seed=5)),
         AgentSpec("rollout_poison", lambda: RolloutPoisonAgent(seed=6)),
+        AgentSpec("counter_trap", lambda: CounterfactualTrapAgent(seed=7)),
     ]
 
 
