@@ -18,6 +18,33 @@ class TrainingEnvTests(unittest.TestCase):
         for action in actions:
             self.assertEqual(id_to_action(action_to_id(action)), action)
 
+    def test_action_encoding_rejects_out_of_bounds_actions(self):
+        actions = [
+            MoveAction((-1, 8)),
+            MoveAction((9, 0)),
+            MoveAction((0, 9)),
+            WallAction("H", -1, 0),
+            WallAction("H", 8, 0),
+            WallAction("V", 0, 8),
+        ]
+
+        for action in actions:
+            with self.subTest(action=action):
+                with self.assertRaises(ValueError):
+                    action_to_id(action)
+
+    def test_id_to_action_rejects_non_integer_ids(self):
+        for action_id in (1.5, "1", True):
+            with self.subTest(action_id=action_id):
+                with self.assertRaises(TypeError):
+                    id_to_action(action_id)
+
+    def test_id_to_action_rejects_out_of_range_ids(self):
+        for action_id in (-1, ACTION_SIZE):
+            with self.subTest(action_id=action_id):
+                with self.assertRaises(ValueError):
+                    id_to_action(action_id)
+
     def test_initial_legal_mask_matches_engine_actions(self):
         env = DiscreteQuoridorEnv()
         obs = env.reset()

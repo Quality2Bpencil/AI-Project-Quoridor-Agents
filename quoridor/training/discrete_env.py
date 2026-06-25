@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from numbers import Integral
 from typing import Any
 
 from quoridor import MoveAction, QuoridorEnv, WallAction
@@ -29,7 +30,15 @@ def action_to_id(action: Action) -> int:
 
     if isinstance(action, MoveAction):
         row, col = action.target
+        if not (0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE):
+            raise ValueError(f"move target must be on the {BOARD_SIZE}x{BOARD_SIZE} board")
         return row * BOARD_SIZE + col
+
+    if not isinstance(action, WallAction):
+        raise TypeError("action must be a MoveAction or WallAction")
+
+    if not (0 <= action.row < WALL_SIZE and 0 <= action.col < WALL_SIZE):
+        raise ValueError(f"wall anchor must be in [0, {WALL_SIZE - 1}] for row and col")
 
     offset = MOVE_ACTIONS
     if action.orientation == "V":
@@ -40,6 +49,9 @@ def action_to_id(action: Action) -> int:
 def id_to_action(action_id: int) -> Action:
     """Convert a discrete action id in [0, 208] to an engine action object."""
 
+    if not isinstance(action_id, Integral) or isinstance(action_id, bool):
+        raise TypeError("action_id must be an integer")
+    action_id = int(action_id)
     if not 0 <= action_id < ACTION_SIZE:
         raise ValueError(f"action_id must be in [0, {ACTION_SIZE - 1}]")
 

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quoridor AI Battle Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/app.css" />
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+      }
+    }
+    </script>
+  </head>
+  <body>
+    <main class="game-shell">
+      <header class="topbar">
+        <div class="tb-left">
+          <div class="brand-cube" aria-hidden="true">Q</div>
+          <strong>Quoridor</strong><em>AI</em>
+        </div>
+        <div class="tb-right">
+          <span class="timer" id="timerValue">00:00</span>
+          <span class="badge" id="matchStatus" role="status" aria-live="polite"><i class="badge-pip"></i>Ready</span>
+        </div>
+      </header>
+
+      <div class="game-area">
+        <aside class="side-panel side-p0" id="panel0" aria-label="Player 0">
+          <div class="portrait-frame">
+            <div class="portrait-pawn p0" aria-hidden="true"></div>
+          </div>
+          <div class="player-name">Player 0</div>
+          <select id="player0" class="sp-select" aria-label="P0 agent"></select>
+          <div class="sp-turn" id="p0Turn"></div>
+          <div class="player-stats">
+            <span>Path <strong id="p0PanelPath">8</strong></span>
+            <span>Div <strong id="p0PanelDiv">0</strong></span>
+            <span>Walls <strong id="p0WallCount">10</strong></span>
+          </div>
+          <div class="sp-rack" id="p0Rack"></div>
+        </aside>
+
+        <section class="board-stage" aria-label="Quoridor board">
+          <div class="board-frame">
+            <div class="board-container" id="boardContainer"></div>
+            <div class="board-hint" id="boardHint" aria-live="polite">Ready</div>
+          </div>
+        </section>
+
+        <aside class="side-panel side-p1" id="panel1" aria-label="Player 1">
+          <div class="portrait-frame">
+            <div class="portrait-pawn p1" aria-hidden="true"></div>
+          </div>
+          <div class="player-name">Player 1</div>
+          <select id="player1" class="sp-select" aria-label="P1 agent"></select>
+          <div class="sp-turn" id="p1Turn"></div>
+          <div class="player-stats">
+            <span>Path <strong id="p1PanelPath">8</strong></span>
+            <span>Div <strong id="p1PanelDiv">0</strong></span>
+            <span>Walls <strong id="p1WallCount">10</strong></span>
+          </div>
+          <div class="sp-rack" id="p1Rack"></div>
+        </aside>
+      </div>
+
+      <div class="controls-bar">
+        <div class="cb-group command-group">
+          <button id="stepButton" class="cb-btn icon-btn" title="[->]" aria-label="Step">Step</button>
+          <button id="playButton" class="cb-btn primary" title="[Space]" aria-pressed="false">Play</button>
+          <button id="resetButton" class="cb-btn icon-btn" title="[R]" aria-label="Reset">Reset</button>
+        </div>
+        <div class="cb-sep"></div>
+        <div class="cb-group" id="speedPresets" aria-label="Playback speed">
+          <button class="sp-btn" data-ms="1200">0.25x</button>
+          <button class="sp-btn" data-ms="420" data-default>1x</button>
+          <button class="sp-btn" data-ms="80">4x</button>
+        </div>
+        <div class="cb-sep"></div>
+        <div class="cb-group mode-tabs" aria-label="Human action mode">
+          <button class="mode active" data-mode="move" title="[M]" aria-pressed="true">Move</button>
+          <button class="mode" data-mode="H" title="[H]" aria-pressed="false">Wall H</button>
+          <button class="mode" data-mode="V" title="[V]" aria-pressed="false">Wall V</button>
+        </div>
+        <div class="cb-sep"></div>
+        <div class="cb-info">
+          <span>Turn <strong id="turnMetric">0</strong></span>
+          <span class="ci-p0">P0 <strong id="p0Path">8</strong></span>
+          <span class="ci-p1">P1 <strong id="p1Path">8</strong></span>
+        </div>
+        <div class="cb-spacer"></div>
+        <label class="cb-check"><input id="togglePaths" type="checkbox" checked /><span>Paths</span></label>
+        <label class="cb-check"><input id="toggleLegal" type="checkbox" checked /><span>Hints</span></label>
+        <label class="cb-check"><input id="toggleWalls" type="checkbox" checked /><span>Walls</span></label>
+        <div class="cb-sep"></div>
+        <button class="cb-btn" id="drawerToggle" title="[L]" aria-expanded="false" aria-controls="drawer">Log</button>
+      </div>
+
+      <div class="tl-strip">
+        <div class="tl-track" id="timelineTrack"></div>
+        <span class="tl-info" id="lastAction">No actions yet</span>
+      </div>
+    </main>
+
+    <aside class="drawer" id="drawer" aria-label="Tactical log">
+      <div class="dr-header">
+        <span class="dr-title">Tactical Log</span>
+        <button class="dr-close" id="drawerClose" aria-label="Close log">x</button>
+      </div>
+      <section class="dr-section">
+        <div class="section-label">Metrics</div>
+        <div class="metric-grid">
+          <div class="metric"><span>Turn</span><strong id="turnMetric2">0</strong></div>
+          <div class="metric"><span>Current</span><strong id="currentMetric">P0</strong></div>
+          <div class="metric val-p0"><span>P0 Path</span><strong id="p0PathD">8</strong></div>
+          <div class="metric val-p1"><span>P1 Path</span><strong id="p1PathD">8</strong></div>
+          <div class="metric val-p0"><span>P0 Div</span><strong id="p0Diversity">0</strong></div>
+          <div class="metric val-p1"><span>P1 Div</span><strong id="p1Diversity">0</strong></div>
+        </div>
+      </section>
+      <section class="dr-section dr-log">
+        <div class="section-label">Action Log</div>
+        <ol id="actionLog"></ol>
+      </section>
+    </aside>
+
+    <div class="winner-overlay" id="winnerOverlay" aria-hidden="true">
+      <div class="winner-card" id="winnerCard">
+        <div class="w-crown" id="winnerCrown"></div>
+        <h2 class="w-title" id="winnerTitle">Player 0 Wins!</h2>
+        <p class="w-detail" id="winnerDetail">Completed in 0 turns</p>
+        <button class="w-replay" id="winnerReplay">New Game</button>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
