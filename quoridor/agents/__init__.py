@@ -1,6 +1,7 @@
 """Example agent interfaces for the Quoridor engine."""
 
 from .adversarial import ArgmaxQTrapAgent, CounterfactualTrapAgent, DepthTrapAgent, PathLureAgent, RolloutPoisonAgent
+from .alphazero import AlphaZeroAgent
 from .approx_q import ApproxQLearningAgent
 from .base import Agent
 from .deep_q import DeepQAgent
@@ -13,6 +14,7 @@ from .random_agent import RandomAgent
 
 __all__ = [
     "Agent",
+    "AlphaZeroAgent",
     "ApproxQLearningAgent",
     "ArgmaxQTrapAgent",
     "CounterfactualTrapAgent",

@@ -35,6 +35,7 @@ The game uses the standard 9x9 Quoridor board. Each player starts with 10 walls.
 | Approx-Q | `ApproxQLearningAgent` | Linear function-approximation RL baseline. |
 | Deep-Q | `DeepQAgent` | DQN baseline trained with PyTorch and legal-action masking. |
 | PUCT | `PUCTAgent` | Neural-pruned MCTS interface baseline using heuristic priors until a trained network is available. |
+| AlphaZero-style PUCT | `AlphaZeroAgent` | Policy/value-network-compatible PUCT wrapper; disabled in Web until a checkpoint exists. |
 
 ### Adversarial Policies
 
@@ -54,6 +55,7 @@ Primary comparisons:
 2. Adversarial round-robin: each trap policy against its intended victim and non-target baselines.
 3. Ablation: vary trap weight, response width, wall candidate budget, and MCTS/PUCT simulation budget.
 4. RL sensitivity: compare untrained, lightly trained, and longer-trained Q policies.
+5. AlphaZero progression: compare heuristic PUCT, randomly initialized AlphaZero wrapper, bootstrapped policy/value checkpoints, and self-play checkpoints.
 
 Primary metrics:
 
@@ -63,6 +65,34 @@ Primary metrics:
 - Average opponent path delta after wall actions.
 - Average wall actions per game.
 - Latency per agent step for Web UI usability.
+- Policy improvement strength: score rate of network-only policy, PUCT-guided policy, and prior best checkpoint.
+
+## AlphaZero-Style Final Agent Plan
+
+The final strong-agent direction is AlphaZero-style self-play rather than DQN-only control. The current codebase now exposes the required interfaces:
+
+- `PUCTAgent.search_policy(...)` returns visit-count policy targets.
+- `AlphaZeroNet` predicts action logits over the fixed 209-action space plus a scalar value.
+- `AlphaZeroAgent` injects neural priors and values into PUCT when a checkpoint is available.
+- `alphazero_loss(...)` combines value regression and policy cross entropy.
+- `experiments/train_alphazero.py` starts a single self-play training run and writes `experiments/results/alphazero_policy_value.pt`.
+- `experiments/run_alphazero_config.py` runs staged, chunked, resumable long training from `experiments/configs/alphazero_remote_long.json`.
+
+Long-run training loop:
+
+1. Run self-play with current best checkpoint or heuristic fallback.
+2. Store `(flat_observation, visit_count_policy, game_outcome)` examples.
+3. Train `AlphaZeroNet` on replayed self-play examples.
+4. Evaluate candidate checkpoint in the arena against current best and enhanced heuristic baselines.
+5. Promote only if the candidate passes a fixed score-rate threshold.
+
+An initial smoke checkpoint has been produced from 2 self-play games with 60 examples and 2 optimizer updates on CUDA. This only validates the training/checkpoint path; it is not a claim of strong play. The remote long-run config intentionally starts from scratch with a clean 256-hidden policy/value network.
+
+This follows the high-level pattern from AlphaGo Zero and AlphaZero, but the implementation must be scaled down for local GPU constraints. The paper should distinguish clearly between:
+
+- heuristic-enhanced PUCT baseline,
+- AlphaZero-compatible interface,
+- actually trained AlphaZero-style checkpoint.
 
 ## Reproducibility Commands
 
@@ -71,6 +101,8 @@ python -m unittest discover -s tests -v
 python experiments\train_q_learning.py --episodes 500 --max-turns 120 --output experiments\results\q_learning_policy.json
 python experiments\train_approx_q.py --episodes 500 --max-turns 120 --output experiments\results\approx_q_policy.json
 F:\Programs\PythonEnv\torch10\python.exe experiments\train_deep_q.py --episodes 500 --max-turns 120 --device cuda --output experiments\results\deep_q_policy.pt
+python experiments\run_alphazero_config.py --config experiments\configs\alphazero_remote_long.json --dry-run
+python experiments\run_alphazero_config.py --config experiments\configs\alphazero_remote_long.json --resume
 python experiments\run_tournament.py --preset research --games-per-pair 10 --max-turns 150 --workers 4 --resume --output experiments\results\tournament_research_games.csv --matrix-output experiments\results\tournament_research_matchups.csv --score-matrix-output experiments\results\tournament_research_scores.csv
 ```
 
@@ -103,6 +135,7 @@ Planned tables:
 2. Intended-victim matchup matrix.
 3. Ablation table for trap parameters.
 4. Agent latency table for Web UI settings.
+5. AlphaZero checkpoint progression table: stage, games, simulations, arena score rate, and promotion decision.
 
 Arena outputs:
 
@@ -120,6 +153,10 @@ Use verified references only:
 | UCT | Kocsis and Szepesvari, "Bandit Based Monte-Carlo Planning" | https://link.springer.com/chapter/10.1007/11871842_29 |
 | MCTS taxonomy | Browne et al., "A Survey of Monte Carlo Tree Search Methods", DOI `10.1109/TCIAIG.2012.2186810` | https://repository.essex.ac.uk/4117/ |
 | Policy/value-guided search | Silver et al., "Mastering the game of Go without human knowledge" | https://discovery.ucl.ac.uk/10045895/ |
+| General AlphaZero algorithm | Silver et al., "Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm" | https://arxiv.org/abs/1712.01815 |
+| Heuristic MCTS variants | Gelly and Silver, "Monte-Carlo Tree Search and Rapid Action Value Estimation in Computer Go" | https://www.cs.utexas.edu/~pstone/Courses/394Rspring13/resources/mcrave.pdf |
+| Implicit minimax backups in MCTS | Lanctot et al., "Monte Carlo Tree Search with Heuristic Evaluations using Implicit Minimax Backups" | https://mlanctot.info/files/papers/cig14-immcts.pdf |
+| Quoridor MCTS | Respall et al., "Monte Carlo Tree Search for Quoridor" | https://www.researchgate.net/publication/327679826_Monte_Carlo_Tree_Search_for_Quoridor |
 
 ## Limitations
 

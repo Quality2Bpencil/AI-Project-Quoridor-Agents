@@ -54,6 +54,7 @@ class PUCTAgent:
         wall_penalty: float = 2.0,
         wall_candidate_margin: float = 0.0,
         root_blunder_margin: float = 1.0,
+        tactical_shortcut_margin: float = 18.0,
         prior_fn: PriorFn | None = None,
         value_fn: ValueFn | None = None,
         seed: int | None = None,
@@ -76,6 +77,7 @@ class PUCTAgent:
         self.wall_penalty = wall_penalty
         self.wall_candidate_margin = wall_candidate_margin
         self.root_blunder_margin = root_blunder_margin
+        self.tactical_shortcut_margin = tactical_shortcut_margin
         self.prior_fn = prior_fn
         self.value_fn = value_fn
         self.seed = seed
@@ -90,19 +92,11 @@ class PUCTAgent:
         self._transition_cache.clear()
         try:
             root_player = state.current_player
-            root = _PUCTNode(state=state)
-            self._expand(root, root_player, legal_actions)
+            shortcut = self._tactical_shortcut(state, legal_actions, root_player)
+            if shortcut is not None:
+                return shortcut
 
-            for _ in range(self.simulations):
-                node = root
-                path = [node]
-                while node.children and not node.state.done:
-                    node = self._select_child(node, root_player)
-                    path.append(node)
-                if not node.state.done and not node.children:
-                    self._expand(node, root_player)
-                value = self._value(node.state, root_player)
-                self._backpropagate(path, value)
+            root = self._search_root(state, legal_actions, root_player)
 
             if not root.children:
                 return sorted(legal_actions, key=action_sort_key)[0]
@@ -118,6 +112,70 @@ class PUCTAgent:
         finally:
             self._candidate_cache.clear()
             self._transition_cache.clear()
+
+    def search_policy(
+        self,
+        state: QuoridorState,
+        legal_actions: Sequence[Action],
+        *,
+        temperature: float = 1.0,
+    ) -> dict[Action, float]:
+        """Return the PUCT visit-count policy used by AlphaZero self-play."""
+
+        if not legal_actions:
+            raise ValueError("PUCTAgent received no legal actions")
+        if temperature < 0.0:
+            raise ValueError("temperature must be non-negative")
+
+        self._candidate_cache.clear()
+        self._transition_cache.clear()
+        try:
+            root_player = state.current_player
+            shortcut = self._tactical_shortcut(state, legal_actions, root_player)
+            if shortcut is not None:
+                return {action: 1.0 if action == shortcut else 0.0 for action in legal_actions}
+
+            root = self._search_root(state, legal_actions, root_player)
+            if not root.children:
+                uniform = 1.0 / len(legal_actions)
+                return {action: uniform for action in legal_actions}
+
+            visits = {action: float(child.visits) for action, child in root.children.items()}
+            if temperature <= 1e-8:
+                best_action = max(visits, key=lambda action: (visits[action], action_sort_key(action)))
+                return {action: 1.0 if action == best_action else 0.0 for action in legal_actions}
+
+            exponent = 1.0 / temperature
+            weights = {action: visits.get(action, 0.0) ** exponent for action in legal_actions}
+            total = sum(weights.values())
+            if total <= 0.0:
+                uniform = 1.0 / len(legal_actions)
+                return {action: uniform for action in legal_actions}
+            return {action: weight / total for action, weight in weights.items()}
+        finally:
+            self._candidate_cache.clear()
+            self._transition_cache.clear()
+
+    def _search_root(
+        self,
+        state: QuoridorState,
+        legal_actions: Sequence[Action],
+        root_player: int,
+    ) -> _PUCTNode:
+        root = _PUCTNode(state=state)
+        self._expand(root, root_player, legal_actions)
+
+        for _ in range(self.simulations):
+            node = root
+            path = [node]
+            while node.children and not node.state.done:
+                node = self._select_child(node, root_player)
+                path.append(node)
+            if not node.state.done and not node.children:
+                self._expand(node, root_player)
+            value = self._value(node.state, root_player)
+            self._backpropagate(path, value)
+        return root
 
     def _expand(
         self,
@@ -180,6 +238,27 @@ class PUCTAgent:
             return list(filtered)
         legal_set = set(legal_actions)
         return [action for action in filtered if action in legal_set] or list(legal_actions)
+
+    def _tactical_shortcut(
+        self,
+        state: QuoridorState,
+        legal_actions: Sequence[Action],
+        root_player: int,
+    ) -> Action | None:
+        candidates = self._candidate_actions(state, legal_actions)
+        if not candidates:
+            return None
+        best = candidates[0]
+        if not isinstance(best, WallAction):
+            return None
+        moves = [action for action in candidates if isinstance(action, MoveAction)]
+        if not moves:
+            return None
+        best_score = self._evaluate_action_raw(state, best, root_player)
+        best_move_score = max(self._evaluate_action_raw(state, action, root_player) for action in moves)
+        if best_score >= best_move_score + self.tactical_shortcut_margin:
+            return best
+        return None
 
     def _priors(self, state: QuoridorState, actions: Sequence[Action], root_player: int) -> dict[Action, float]:
         if self.prior_fn is not None:

@@ -11,6 +11,7 @@ from quoridor.agents.heuristics import (
     UNREACHABLE_DISTANCE,
     action_sort_key,
     choose_best,
+    evaluate_action,
     evaluate_state,
     path_distance,
 )
@@ -31,6 +32,7 @@ class ApproxQLearningAgent:
         *,
         weights_path: str | Path | None = None,
         epsilon: float = 0.0,
+        heuristic_margin: float = 5.0,
         seed: int | None = None,
     ) -> None:
         if not 0.0 <= epsilon <= 1.0:
@@ -39,6 +41,7 @@ class ApproxQLearningAgent:
         if weights_path is not None:
             self.weights.update(load_weights(weights_path))
         self.epsilon = epsilon
+        self.heuristic_margin = heuristic_margin
         self.rng = random.Random(seed)
 
     def choose_action(self, state: QuoridorState, legal_actions: Sequence[Action]) -> Action:
@@ -55,7 +58,14 @@ class ApproxQLearningAgent:
         scored = [(q_value(self.weights, state, action, state.current_player), action) for action in legal_actions]
         best_value = max(value for value, _ in scored)
         best_actions = [action for value, action in scored if value == best_value]
-        return sorted(best_actions, key=action_sort_key)[0]
+        q_choice = sorted(best_actions, key=action_sort_key)[0]
+        heuristic_choice = choose_best(legal_actions, state, state.current_player)
+        if (
+            evaluate_action(state, q_choice, state.current_player)
+            < evaluate_action(state, heuristic_choice, state.current_player) - self.heuristic_margin
+        ):
+            return heuristic_choice
+        return q_choice
 
 
 def action_features(state: QuoridorState, action: Action, player: int | None = None) -> FeatureVector:

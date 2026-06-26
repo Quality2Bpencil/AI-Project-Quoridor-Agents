@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 from typing import Sequence
 
-from quoridor.agents.heuristics import action_sort_key, choose_best, path_distance
+from quoridor.agents.heuristics import action_sort_key, choose_best, evaluate_action, path_distance
 from quoridor.core.actions import Action
 from quoridor.core.state import QuoridorState
 from quoridor.training.discrete_env import action_to_id
@@ -58,6 +58,7 @@ class QLearningAgent:
         *,
         table_path: str | Path | None = None,
         epsilon: float = 0.0,
+        heuristic_margin: float = 5.0,
         seed: int | None = None,
     ) -> None:
         if not 0.0 <= epsilon <= 1.0:
@@ -66,6 +67,7 @@ class QLearningAgent:
         if table_path is not None:
             self.q_table.update(load_q_table(table_path))
         self.epsilon = epsilon
+        self.heuristic_margin = heuristic_margin
         self.rng = random.Random(seed)
 
     def choose_action(self, state: QuoridorState, legal_actions: Sequence[Action]) -> Action:
@@ -89,7 +91,14 @@ class QLearningAgent:
             for action in legal_actions
             if row.get(action_to_id(action), 0.0) == best_value
         ]
-        return sorted(best_actions, key=action_sort_key)[0]
+        q_choice = sorted(best_actions, key=action_sort_key)[0]
+        heuristic_choice = choose_best(legal_actions, state, state.current_player)
+        if (
+            evaluate_action(state, q_choice, state.current_player)
+            < evaluate_action(state, heuristic_choice, state.current_player) - self.heuristic_margin
+        ):
+            return heuristic_choice
+        return q_choice
 
 
 def load_q_table(path: str | Path) -> QTable:

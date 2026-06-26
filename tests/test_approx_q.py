@@ -19,7 +19,11 @@ class ApproxQLearningTests(unittest.TestCase):
 
     def test_agent_uses_weighted_features(self):
         env = QuoridorEnv()
-        agent = ApproxQLearningAgent(weights={"move_forward": 5.0, "move_sideways": -1.0}, seed=0)
+        agent = ApproxQLearningAgent(
+            weights={"move_forward": 5.0, "move_sideways": -1.0},
+            heuristic_margin=1_000.0,
+            seed=0,
+        )
 
         action = agent.choose_action(env.state, env.legal_actions())
 

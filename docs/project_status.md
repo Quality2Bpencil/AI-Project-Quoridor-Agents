@@ -1,6 +1,6 @@
 # 项目目标与进度记录
 
-更新时间：2026-06-25
+更新时间：2026-06-26
 
 ## 项目定位
 
@@ -358,3 +358,161 @@ python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --m
 - 规则引擎已经比较完整，除非发现规则 bug，不建议在实验阶段改 `quoridor/core/`。
 - 搜索类 agent 的性能关键在候选墙位筛选，不要在每一步完整枚举所有墙再深搜。
 - Web UI 是展示和调试工具，不是训练入口；训练接口以 `DiscreteQuoridorEnv` 为准。
+
+## 启发式增强与 AlphaZero 路线
+
+本轮针对“人类直走即可获胜”和 DepthTrap 互相横跳的问题，开始把算法分成两层：
+
+1. **强启发式搜索层**：作为当前 Web 可玩 AI、arena baseline 和未来 AlphaZero teacher。
+2. **AlphaZero-style policy/value 层**：作为最终强 AI 的训练方向。
+
+### 已完成的启发式增强
+
+`quoridor/agents/heuristics.py` 的局面评分从单一 shortest-path 差值扩展为可解释分量：
+
+| Term | 目的 |
+| --- | --- |
+| `path_distance` | 最短路差值，衡量 race 基础优势。 |
+| `wall_balance` | 墙资源差，避免无意义过度放墙。 |
+| `path_diversity` | 最短路第一步选择数差，衡量是否被 funnel/trap。 |
+| `pawn_mobility` | 当前棋子可移动性差，衡量局部封锁。 |
+| `goal_progress` | 棋子实际推进度，补充最短路相同但位置不同的情况。 |
+| `tempo` | 当前行动权的小权重。 |
+| `pawn_race` | 开局 race projection，用于识别双方直线冲刺时的跳子反杀。 |
+
+墙动作评分新增：
+
+- 对手最短路增量奖励。
+- 对手 path diversity 下降奖励。
+- 对手 pawn mobility 下降奖励。
+- 靠近对手前进方向和中心线的 positional bonus。
+- 空 tempo wall 的轻惩罚。
+
+`MCTSAgent` 与 `PUCTAgent` 增加 root tactical shortcut：当启发式明确判断需要放墙阻止 losing pawn race 时，直接返回该墙，不再在 Web 端浪费模拟预算。
+
+学习策略新增 safety fallback：
+
+- `QLearningAgent`
+- `ApproxQLearningAgent`
+- `DeepQAgent`
+
+当模型动作显著差于启发式动作时，Web/arena 默认会使用启发式动作兜底，避免早期弱 checkpoint 出现明显低级失误。
+
+### AlphaZero 工程接口
+
+新增 AlphaZero-style 组件：
+
+- `quoridor/agents/alphazero.py`
+  - `AlphaZeroAgent`
+  - 有 checkpoint 时使用 neural policy/value + PUCT。
+  - 无 checkpoint 时默认不可用；Web 下拉会禁用该选项，而不是自动 fallback。
+- `quoridor/training/alphazero.py`
+  - `AlphaZeroNet`
+  - `AlphaZeroExample`
+  - `policy_vector`
+  - `alphazero_loss`
+  - `save_alphazero_checkpoint`
+  - `load_alphazero_checkpoint`
+- `PUCTAgent.search_policy(...)`
+  - 输出 visit-count policy distribution，用于 AlphaZero 自对弈训练 target。
+- `experiments/train_alphazero.py`
+  - 运行小规模 AlphaZero-style self-play 训练并保存 checkpoint。
+
+### 参考成熟做法
+
+本项目的最终路线参考：
+
+- AlphaGo Zero：self-play 生成训练目标，单一网络预测 policy 与 value，再用 MCTS/PUCT 改善行动选择。
+- AlphaZero：去除手工 domain-specific augmentations，使用通用 policy/value + MCTS 框架迁移到 chess/shogi/Go。
+- MCTS survey / heuristic MCTS：纯随机 rollout 在复杂棋类里通常不够，需要 heuristic rollout、prior、implicit minimax 或 value 初始化。
+- Quoridor MCTS 相关研究：Quoridor 状态空间和 game-tree complexity 很高，有限预算 MCTS 必须结合领域启发式和候选动作剪枝。
+
+### 终极 AI 训练路线
+
+建议分三阶段推进：
+
+1. **Teacher-guided bootstrap**
+   - 用当前 enhanced heuristic PUCT / MCTS 生成初始 `(state, pi, z)`。
+   - 训练 `AlphaZeroNet` 先模仿 stronger search，避免从随机网络开始时样本效率太低。
+
+2. **Self-play AlphaZero**
+   - 每步使用 `PUCTAgent.search_policy` 得到 visit-count policy。
+   - 前若干回合使用 temperature > 0 增加探索，后期接近 argmax。
+   - 终局后把胜负 `z` 回填到整局样本。
+   - 用 `alphazero_loss = value MSE + policy cross entropy` 更新网络。
+
+3. **Arena gating**
+   - 新 checkpoint 必须在正式 arena 中击败当前 best checkpoint 和 enhanced heuristic baseline。
+   - 通过后才更新 `experiments/results/alphazero_policy_value.pt`。
+
+短期不要声称已经实现“真正 AlphaZero 强度”。当前完成的是 AlphaZero-compatible inference/training interface；正式强度还取决于大规模自对弈训练和 arena gating。
+
+### AlphaZero 训练启动记录
+
+已完成一轮本地 CUDA smoke training：
+
+```powershell
+F:\Programs\PythonEnv\torch10\python.exe experiments\train_alphazero.py --games 2 --simulations 4 --max-turns 30 --hidden-size 64 --action-limit 6 --wall-limit 3 --batch-size 8 --epochs-per-game 1 --seed 0 --device cuda --output experiments\results\alphazero_policy_value.pt
+```
+
+结果：
+
+- games: 2
+- examples: 60
+- updates: 2
+- wins: `(0, 0)`
+- draws: 2
+- device: `cuda`
+- elapsed_seconds: 18.554
+
+该 checkpoint 只证明 self-play/training/checkpoint/Web 启用链路可运行，不代表已有强棋力。
+
+### 远程 AlphaZero 长训练配置
+
+已新增正式远程长训练配置：
+
+- 配置：`experiments/configs/alphazero_remote_long.json`
+- Runner：`experiments/run_alphazero_config.py`
+- 默认最终输出：`experiments/results/alphazero_policy_value.pt`
+- 分阶段 checkpoint 目录：`experiments/results/alphazero_stages/`
+
+当前配置不使用本地 2 局 smoke checkpoint 作为起点，而是从零开始训练一个干净的 256 hidden-size policy/value 网络。默认阶段：
+
+| Stage | Games | Chunk | Simulations | Max turns | Action / wall budget | Batch | Replay cap | 目的 |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |
+| remote_validation | 64 | 16 | 8 | 120 | 10 / 5 | 64 | 20,000 | 验证远程 CUDA、依赖、checkpoint 恢复和吞吐。 |
+| bootstrap | 512 | 64 | 16 | 140 | 14 / 7 | 128 | 60,000 | 初步摆脱随机 policy，学习基本 race / block 模式。 |
+| policy_improvement | 4,096 | 128 | 48 | 170 | 22 / 10 | 256 | 160,000 | 形成可对抗 heuristic PUCT/MCTS 的候选策略。 |
+| champion_search | 16,384 | 256 | 96 | 190 | 30 / 14 | 512 | 320,000 | 长跑候选冠军 checkpoint。 |
+
+远程 Ubuntu 建议启动命令：
+
+```bash
+cd /path/to/Quoridor
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install torch numpy
+export PYTHONPATH="$PWD"
+python experiments/run_alphazero_config.py --config experiments/configs/alphazero_remote_long.json --resume
+```
+
+先做 dry run：
+
+```bash
+python experiments/run_alphazero_config.py --config experiments/configs/alphazero_remote_long.json --dry-run
+```
+
+如果远程 GPU/CPU 比预期慢，先只跑验证阶段：
+
+```bash
+python experiments/run_alphazero_config.py --config experiments/configs/alphazero_remote_long.json --resume --max-stages 1
+```
+
+训练晋级标准不写成“主观强”，而写成可复现实验门槛：
+
+1. 候选 checkpoint 必须先通过 `remote_validation` 并能被 Web 的 `AlphaZero` agent 加载。
+2. 候选 checkpoint 进入 arena gating，至少对 `PUCT 64`、`MCTS 64`、`DepthTrap`、`CounterTrap` 和上一版 best AlphaZero 达到配置中的 score-rate 阈值。
+3. 通过 gating 后才允许覆盖 `experiments/results/alphazero_policy_value.pt` 作为 Web 端可选强策略。
+
+注意：当前 runner 的可恢复粒度是 chunk checkpoint；中断后用 `--resume` 跳过已完成 chunk。为控制内存，self-play replay buffer 使用 `replay_capacity` 裁剪，统计中的 `examples` 是累计生成样本数，不是当前内存中保留的样本数。

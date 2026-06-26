@@ -1024,10 +1024,18 @@ function initControls() {
 
 async function initAgents() {
   const data = await apiGet("/api/agents");
+  const status = data.agentStatus || {};
   [el.player0, el.player1].forEach((sel, i) => {
     sel.innerHTML = "";
     (data.agents || []).forEach((name) => {
-      const o = document.createElement("option"); o.value = name; o.textContent = name; sel.appendChild(o);
+      const agentStatus = status[name] || { enabled: true, reason: "" };
+      const enabled = agentStatus.enabled !== false;
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = enabled ? name : `${name} - unavailable`;
+      o.disabled = !enabled;
+      if (!enabled && agentStatus.reason) o.title = agentStatus.reason;
+      sel.appendChild(o);
     });
     sel.value = i === 0 ? "Human" : "Random";
   });

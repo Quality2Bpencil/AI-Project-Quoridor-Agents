@@ -1,0 +1,88 @@
+{
+  "description": "Remote Ubuntu long-run AlphaZero-style training plan for Quoridor. The local smoke checkpoint is intentionally not used as the starting point.",
+  "base_output": "experiments/results/alphazero_policy_value.pt",
+  "stage_dir": "experiments/results/alphazero_stages",
+  "initial_checkpoint": null,
+  "device": "cuda",
+  "seed": 20260626,
+  "stages": [
+    {
+      "name": "remote_validation",
+      "games": 64,
+      "chunk_games": 16,
+      "simulations": 8,
+      "max_turns": 120,
+      "hidden_size": 256,
+      "action_limit": 10,
+      "wall_limit": 5,
+      "batch_size": 64,
+      "epochs_per_game": 1,
+      "lr": 0.001,
+      "temperature_turns": 18,
+      "replay_capacity": 20000
+    },
+    {
+      "name": "bootstrap",
+      "games": 512,
+      "chunk_games": 64,
+      "simulations": 16,
+      "max_turns": 140,
+      "hidden_size": 256,
+      "action_limit": 14,
+      "wall_limit": 7,
+      "batch_size": 128,
+      "epochs_per_game": 1,
+      "lr": 0.0008,
+      "temperature_turns": 16,
+      "replay_capacity": 60000
+    },
+    {
+      "name": "policy_improvement",
+      "games": 4096,
+      "chunk_games": 128,
+      "simulations": 48,
+      "max_turns": 170,
+      "hidden_size": 256,
+      "action_limit": 22,
+      "wall_limit": 10,
+      "batch_size": 256,
+      "epochs_per_game": 1,
+      "lr": 0.0004,
+      "temperature_turns": 12,
+      "replay_capacity": 160000
+    },
+    {
+      "name": "champion_search",
+      "games": 16384,
+      "chunk_games": 256,
+      "simulations": 96,
+      "max_turns": 190,
+      "hidden_size": 256,
+      "action_limit": 30,
+      "wall_limit": 14,
+      "batch_size": 512,
+      "epochs_per_game": 1,
+      "lr": 0.0002,
+      "temperature_turns": 10,
+      "replay_capacity": 320000
+    }
+  ],
+  "arena_gating": {
+    "games_per_pair": 200,
+    "max_turns": 200,
+    "workers": 8,
+    "promote_score_rate": 0.55,
+    "required_targets": [
+      "PUCT 64",
+      "MCTS 64",
+      "DepthTrap",
+      "CounterTrap",
+      "previous_best_alphazero"
+    ],
+    "outputs": {
+      "games": "experiments/results/alphazero_gate_games.csv",
+      "matchups": "experiments/results/alphazero_gate_matchups.csv",
+      "scores": "experiments/results/alphazero_gate_scores.csv"
+    }
+  }
+}

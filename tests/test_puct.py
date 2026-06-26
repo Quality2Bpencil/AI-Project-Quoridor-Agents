@@ -2,6 +2,7 @@ import unittest
 
 from quoridor import MoveAction, QuoridorEnv
 from quoridor.agents import PUCTAgent
+from quoridor.core.actions import WallAction
 from quoridor.core.state import QuoridorState
 
 
@@ -14,13 +15,13 @@ class PUCTAgentTests(unittest.TestCase):
 
         self.assertIn(action, env.legal_actions())
 
-    def test_puct_expands_best_opening_move_with_tiny_budget(self):
+    def test_puct_blocks_losing_opening_race_with_tiny_budget(self):
         env = QuoridorEnv()
         agent = PUCTAgent(simulations=1, action_limit=6, wall_limit=3)
 
         action = agent.choose_action(env.state, env.legal_actions())
 
-        self.assertEqual(action, MoveAction((7, 4)))
+        self.assertIsInstance(action, WallAction)
 
     def test_puct_prefers_immediate_winning_move(self):
         state = QuoridorState(pawn_positions=((1, 4), (8, 4)), current_player=0)
@@ -31,6 +32,15 @@ class PUCTAgentTests(unittest.TestCase):
         action = agent.choose_action(state, env.legal_actions())
 
         self.assertEqual(action, MoveAction((0, 4)))
+
+    def test_puct_search_policy_is_probability_distribution(self):
+        env = QuoridorEnv()
+        agent = PUCTAgent(simulations=2, action_limit=6, wall_limit=3)
+
+        policy = agent.search_policy(env.state, env.legal_actions())
+
+        self.assertEqual(set(policy), set(env.legal_actions()))
+        self.assertAlmostEqual(sum(policy.values()), 1.0)
 
 
 if __name__ == "__main__":

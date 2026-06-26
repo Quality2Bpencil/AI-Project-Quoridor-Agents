@@ -11,8 +11,8 @@ from quoridor.agents import (
     PathLureAgent,
     RolloutPoisonAgent,
 )
-from quoridor.agents.heuristics import path_distance
-from quoridor.core.actions import MoveAction
+from quoridor.agents.heuristics import choose_best, evaluate_state_terms, path_distance, pawn_race_winner
+from quoridor.core.actions import MoveAction, WallAction
 from quoridor.core.state import QuoridorState
 
 
@@ -44,7 +44,7 @@ class SearchAgentTests(unittest.TestCase):
 
         action = agent.choose_action(env.state, env.legal_actions())
 
-        self.assertEqual(action, MoveAction((7, 4)))
+        self.assertIsInstance(action, WallAction)
 
     def test_mcts_prefers_immediate_winning_move_with_tiny_budget(self):
         state = QuoridorState(pawn_positions=((1, 4), (8, 4)), current_player=0)
@@ -62,7 +62,23 @@ class SearchAgentTests(unittest.TestCase):
 
         action = agent.choose_action(env.state, env.legal_actions())
 
-        self.assertEqual(action, MoveAction((7, 4)))
+        self.assertNotIn(action, [MoveAction((8, 3)), MoveAction((8, 5))])
+
+    def test_opening_heuristic_blocks_losing_pawn_race(self):
+        env = QuoridorEnv()
+
+        self.assertEqual(pawn_race_winner(env.state), 1)
+        self.assertIsInstance(choose_best(env.legal_actions(), env.state, 0), WallAction)
+
+    def test_heuristic_terms_are_explainable(self):
+        env = QuoridorEnv()
+
+        terms = evaluate_state_terms(env.state, 0)
+
+        self.assertIn("path_distance", terms)
+        self.assertIn("path_diversity", terms)
+        self.assertIn("pawn_mobility", terms)
+        self.assertIn("pawn_race", terms)
 
     def test_path_lure_returns_legal_action(self):
         self.assert_agent_returns_legal_action(

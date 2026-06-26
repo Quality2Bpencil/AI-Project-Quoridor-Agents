@@ -23,7 +23,7 @@ class QLearningTests(unittest.TestCase):
         preferred = MoveAction((8, 3))
         key = state_key(env.state)
         table = {key: {action_to_id(preferred): 5.0}}
-        agent = QLearningAgent(q_table=table, seed=0)
+        agent = QLearningAgent(q_table=table, heuristic_margin=1_000.0, seed=0)
 
         action = agent.choose_action(env.state, env.legal_actions())
 

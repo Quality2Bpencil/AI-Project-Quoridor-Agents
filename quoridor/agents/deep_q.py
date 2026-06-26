@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
-from quoridor.agents.heuristics import choose_best
+from quoridor.agents.heuristics import choose_best, evaluate_action
 from quoridor.core.actions import Action
 from quoridor.core.state import QuoridorState
 from quoridor.training.discrete_env import ACTION_SIZE, DiscreteQuoridorEnv, action_to_id
@@ -23,10 +23,12 @@ class DeepQAgent:
         *,
         checkpoint_path: str | Path | None = None,
         device: str | None = None,
+        heuristic_margin: float = 5.0,
         seed: int | None = None,
     ) -> None:
         self.checkpoint_path = Path(checkpoint_path) if checkpoint_path is not None else None
         self.device_name = device
+        self.heuristic_margin = heuristic_margin
         self.seed = seed
         self._model = None
         self._device = None
@@ -52,6 +54,12 @@ class DeepQAgent:
             action_id = int(torch.argmax(q_values + mask).item())
         for action in legal_actions:
             if action_to_id(action) == action_id:
+                heuristic_choice = choose_best(legal_actions, state, state.current_player)
+                if (
+                    evaluate_action(state, action, state.current_player)
+                    < evaluate_action(state, heuristic_choice, state.current_player) - self.heuristic_margin
+                ):
+                    return heuristic_choice
                 return action
         return choose_best(legal_actions, state, state.current_player)
 

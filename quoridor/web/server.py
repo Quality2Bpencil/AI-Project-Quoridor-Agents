@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import secrets
 import threading
-from collections import deque
+from collections import Counter, deque
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,6 +16,7 @@ from urllib.parse import urlparse
 
 from quoridor import MoveAction, QuoridorEnv, WallAction
 from quoridor.agents import (
+    AlphaZeroAgent,
     ApproxQLearningAgent,
     ArgmaxQTrapAgent,
     CounterfactualTrapAgent,
@@ -29,18 +31,19 @@ from quoridor.agents import (
     RandomAgent,
     RolloutPoisonAgent,
 )
-from quoridor.agents.heuristics import path_distance, path_diversity
+from quoridor.agents.heuristics import path_distance, path_diversity, ranked_actions
 from quoridor.core.actions import Action
-from quoridor.core.rules import adjacent_reachable
+from quoridor.core.rules import adjacent_reachable, apply_action
 from quoridor.core.state import QuoridorState
 
 STATIC_DIR = Path(__file__).with_name("static")
 
-AgentFactory = Callable[[int], object]
+AgentFactory = Callable[[int, int], object]
+ALPHAZERO_CHECKPOINT = Path("experiments/results/alphazero_policy_value.pt")
 
 
 def _factory(factory: Callable[..., object], **kwargs: Any) -> AgentFactory:
-    return lambda player: factory(seed=player, **kwargs)
+    return lambda player, seed: factory(seed=seed, **kwargs)
 
 
 AGENT_FACTORIES: dict[str, AgentFactory | None] = {
@@ -48,13 +51,20 @@ AGENT_FACTORIES: dict[str, AgentFactory | None] = {
     "Random": _factory(RandomAgent),
     "Greedy BFS": _factory(GreedyBFSAgent, action_limit=20, wall_limit=12),
     "Minimax d1": _factory(MinimaxAgent, depth=1, action_limit=10, wall_limit=6),
-    "MCTS 8": _factory(MCTSAgent, iterations=8, rollout_depth=5, action_limit=8, wall_limit=4),
-    "PUCT 8": _factory(PUCTAgent, simulations=8, action_limit=8, wall_limit=4),
+    "MCTS 16": _factory(MCTSAgent, iterations=16, rollout_depth=5, action_limit=8, wall_limit=4),
+    "PUCT 16": _factory(PUCTAgent, simulations=16, action_limit=8, wall_limit=4),
+    "AlphaZero": _factory(
+        AlphaZeroAgent,
+        checkpoint_path=ALPHAZERO_CHECKPOINT,
+        simulations=16,
+        action_limit=8,
+        wall_limit=4,
+    ),
     "Q-Learning": _factory(QLearningAgent, table_path=Path("experiments/results/q_learning_policy.json")),
     "Approx-Q": _factory(ApproxQLearningAgent, weights_path=Path("experiments/results/approx_q_policy.json")),
     "Deep-Q": _factory(DeepQAgent, checkpoint_path=Path("experiments/results/deep_q_policy.pt")),
     "PathLure": _factory(PathLureAgent, action_limit=8, wall_limit=4, victim_action_limit=8),
-    "DepthTrap": _factory(DepthTrapAgent, action_limit=8, wall_limit=4, victim_action_limit=6, followup_limit=6),
+    "DepthTrap": _factory(DepthTrapAgent, action_limit=6, wall_limit=3, victim_action_limit=4, followup_limit=4),
     "RolloutPoison": _factory(
         RolloutPoisonAgent,
         action_limit=6,
@@ -80,15 +90,41 @@ AGENT_FACTORIES: dict[str, AgentFactory | None] = {
     ),
 }
 
+AGENT_REQUIRED_FILES: dict[str, Path] = {
+    "Q-Learning": Path("experiments/results/q_learning_policy.json"),
+    "Approx-Q": Path("experiments/results/approx_q_policy.json"),
+    "Deep-Q": Path("experiments/results/deep_q_policy.pt"),
+    "AlphaZero": ALPHAZERO_CHECKPOINT,
+}
+
+
+def agent_status() -> dict[str, dict[str, object]]:
+    status: dict[str, dict[str, object]] = {}
+    for name in AGENT_FACTORIES:
+        required = AGENT_REQUIRED_FILES.get(name)
+        enabled = required is None or required.exists()
+        status[name] = {
+            "enabled": enabled,
+            "reason": "" if enabled else f"missing {required}",
+        }
+    return status
+
+
+def agent_enabled(name: str) -> bool:
+    return bool(agent_status()[name]["enabled"])
+
 
 class WebGameSession:
     def __init__(self) -> None:
         self.env = QuoridorEnv()
         self.player_types = ["Human", "Random"]
+        self.seed_nonce = 0
         self.agents = [self._make_agent(0), self._make_agent(1)]
         self.history: deque[str] = deque(maxlen=80)
         self.last_action: str | None = None
         self.wall_owners: dict[tuple[str, int, int], int] = {}
+        self.repetition_counts: Counter[tuple[object, ...]] = Counter()
+        self._mark_repetition_state(self.env.state)
 
     def reset(self) -> dict[str, Any]:
         self.env.reset()
@@ -96,6 +132,8 @@ class WebGameSession:
         self.history.clear()
         self.last_action = None
         self.wall_owners.clear()
+        self.repetition_counts.clear()
+        self._mark_repetition_state(self.env.state)
         return self.state_payload()
 
     def set_players(self, players: list[str]) -> dict[str, Any]:
@@ -104,6 +142,9 @@ class WebGameSession:
         for player_type in players:
             if player_type not in AGENT_FACTORIES:
                 raise ValueError(f"unknown player type: {player_type}")
+            if not agent_enabled(player_type):
+                reason = agent_status()[player_type]["reason"]
+                raise ValueError(f"agent unavailable: {player_type} ({reason})")
         self.player_types = list(players)
         self.agents = [self._make_agent(0), self._make_agent(1)]
         return self.state_payload()
@@ -127,7 +168,9 @@ class WebGameSession:
         agent = self.agents[player]
         if agent is None:
             raise ValueError("missing agent instance")
-        action = agent.choose_action(self.env.state, self.env.legal_actions())  # type: ignore[attr-defined]
+        legal_actions = self.env.legal_actions()
+        action = agent.choose_action(self.env.state, legal_actions)  # type: ignore[attr-defined]
+        action = self._avoid_repetition(action, legal_actions)
         self._step(action)
         return self.state_payload()
 
@@ -155,6 +198,7 @@ class WebGameSession:
             "remainingWalls": list(state.remaining_walls),
             "playerTypes": list(self.player_types),
             "agentOptions": list(AGENT_FACTORIES.keys()),
+            "agentStatus": agent_status(),
             "legalMoves": [list(pos) for pos in legal_moves],
             "legalWalls": legal_walls,
             "pathLengths": [path_distance(state, 0), path_distance(state, 1)],
@@ -166,16 +210,63 @@ class WebGameSession:
 
     def _make_agent(self, player: int) -> object | None:
         factory = AGENT_FACTORIES[self.player_types[player]]
-        return None if factory is None else factory(player)
+        if not agent_enabled(self.player_types[player]):
+            raise ValueError(f"agent unavailable: {self.player_types[player]}")
+        return None if factory is None else factory(player, self._next_seed(player))
 
     def _step(self, action: Action) -> None:
         player = self.env.state.current_player
         if isinstance(action, WallAction):
             self.wall_owners[(action.orientation, action.row, action.col)] = player
         self.env.step(action)
+        self._mark_repetition_state(self.env.state)
         label = _format_action(player, action)
         self.last_action = label
         self.history.append(label)
+
+    def _next_seed(self, player: int) -> int:
+        self.seed_nonce += 1
+        return secrets.randbits(63) ^ (self.seed_nonce << 8) ^ player
+
+    def _avoid_repetition(self, action: Action, legal_actions: list[Action]) -> Action:
+        if self._next_repetition_count(action) == 0:
+            return action
+
+        legal_set = set(legal_actions)
+        candidates = [
+            candidate
+            for candidate in ranked_actions(
+                self.env.state,
+                max_actions=32,
+                wall_limit=16,
+                wall_radius=3,
+            )
+            if candidate in legal_set
+        ]
+        candidates.extend(candidate for candidate in legal_actions if candidate not in candidates)
+        for candidate in candidates:
+            if candidate != action and self._next_repetition_count(candidate) == 0:
+                return candidate
+        return action
+
+    def _next_repetition_count(self, action: Action) -> int:
+        try:
+            next_state = apply_action(self.env.state, action)
+        except ValueError:
+            return 0
+        return self.repetition_counts[self._repetition_key(next_state)]
+
+    def _mark_repetition_state(self, state: QuoridorState) -> None:
+        self.repetition_counts[self._repetition_key(state)] += 1
+
+    @staticmethod
+    def _repetition_key(state: QuoridorState) -> tuple[object, ...]:
+        return (
+            state.current_player,
+            state.pawn_positions,
+            state.walls,
+            state.remaining_walls,
+        )
 
 
 def _action_from_payload(payload: dict[str, Any]) -> Action:
@@ -226,7 +317,7 @@ class QuoridorWebHandler(BaseHTTPRequestHandler):
             self._send_json(self._with_session(lambda session: session.state_payload()))
             return
         if path == "/api/agents":
-            self._send_json({"agents": list(AGENT_FACTORIES.keys())})
+            self._send_json({"agents": list(AGENT_FACTORIES.keys()), "agentStatus": agent_status()})
             return
         if path == "/":
             path = "/index.html"

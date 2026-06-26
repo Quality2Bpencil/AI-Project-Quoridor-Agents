@@ -39,6 +39,7 @@ class MCTSAgent:
         wall_penalty: float = 2.0,
         wall_candidate_margin: float = 0.0,
         root_blunder_margin: float = 1.0,
+        tactical_shortcut_margin: float = 18.0,
         seed: int | None = None,
     ) -> None:
         if iterations < 1:
@@ -55,6 +56,7 @@ class MCTSAgent:
         self.wall_penalty = wall_penalty
         self.wall_candidate_margin = wall_candidate_margin
         self.root_blunder_margin = root_blunder_margin
+        self.tactical_shortcut_margin = tactical_shortcut_margin
         self.rng = random.Random(seed)
         self._candidate_cache: dict[QuoridorState, list[Action]] = {}
         self._transition_cache: dict[tuple[QuoridorState, Action], QuoridorState] = {}
@@ -67,6 +69,10 @@ class MCTSAgent:
         self._transition_cache.clear()
         try:
             root_player = state.current_player
+            shortcut = self._tactical_shortcut(state, legal_actions, root_player)
+            if shortcut is not None:
+                return shortcut
+
             root = _Node(state=state, untried_actions=self._untried_actions(state))
             if not root.untried_actions:
                 root.untried_actions = list(reversed(sorted(legal_actions, key=action_sort_key)))
@@ -138,6 +144,28 @@ class MCTSAgent:
         # ranked_actions returns best-first; pop() should therefore expand the
         # strongest heuristic candidate first for low-iteration searches.
         return list(reversed(self._candidate_actions(state)))
+
+    def _tactical_shortcut(
+        self,
+        state: QuoridorState,
+        legal_actions: Sequence[Action],
+        root_player: int,
+    ) -> Action | None:
+        legal_set = set(legal_actions)
+        candidates = [action for action in self._candidate_actions(state) if action in legal_set]
+        if not candidates:
+            return None
+        best = candidates[0]
+        if not isinstance(best, WallAction):
+            return None
+        moves = [action for action in candidates if isinstance(action, MoveAction)]
+        if not moves:
+            return None
+        best_score = self._evaluate_action(state, best, root_player)
+        best_move_score = max(self._evaluate_action(state, action, root_player) for action in moves)
+        if best_score >= best_move_score + self.tactical_shortcut_margin:
+            return best
+        return None
 
     def _select(self, node: _Node, root_player: int) -> _Node:
         while not node.untried_actions and node.children and not node.state.done:
