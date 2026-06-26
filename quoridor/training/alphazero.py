@@ -14,10 +14,12 @@ import torch.nn.functional as F
 from torch import nn
 
 from quoridor import QuoridorEnv
-from quoridor.agents.heuristics import evaluate_state
 from quoridor.core.actions import Action
+from quoridor.core.rules import legal_pawn_moves, shortest_path_length
 from quoridor.training.discrete_env import ACTION_SIZE, DiscreteQuoridorEnv
 from quoridor.training.discrete_env import action_to_id
+
+UNREACHABLE_DISTANCE = 1_000
 
 
 class AlphaZeroNet(nn.Module):
@@ -268,7 +270,28 @@ def _model_value(model: AlphaZeroNet, device: torch.device, state: object, root_
 
 
 def _draw_value_target(state: object, player: int, scale: float) -> float:
-    return tanh(evaluate_state(state, player) / scale)  # type: ignore[arg-type]
+    opponent = 1 - player
+    self_dist = _path_distance(state, player)
+    opp_dist = _path_distance(state, opponent)
+    wall_balance = getattr(state, "remaining_walls")[player] - getattr(state, "remaining_walls")[opponent]
+    progress = _goal_progress(state, player) - _goal_progress(state, opponent)
+    mobility = len(legal_pawn_moves(state, player)) - len(legal_pawn_moves(state, opponent))  # type: ignore[arg-type]
+    tempo = 0.25 if getattr(state, "current_player") == player else -0.25
+    score = 10.0 * (opp_dist - self_dist) + 0.75 * wall_balance + 0.5 * progress + 0.75 * mobility + tempo
+    return tanh(score / scale)
+
+
+def _path_distance(state: object, player: int) -> int:
+    distance = shortest_path_length(state, player)  # type: ignore[arg-type]
+    return UNREACHABLE_DISTANCE if distance is None else distance
+
+
+def _goal_progress(state: object, player: int) -> int:
+    row, _ = getattr(state, "pawn_positions")[player]
+    board_size = getattr(state, "board_size")
+    if player == 0:
+        return board_size - 1 - row
+    return row
 
 
 def _sample_policy_action(policy: Mapping[Action, float], rng: random.Random) -> Action:
