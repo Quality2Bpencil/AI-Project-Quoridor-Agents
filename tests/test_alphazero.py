@@ -117,6 +117,25 @@ class AlphaZeroTests(unittest.TestCase):
                 device="cpu",
             )
 
+    def test_draw_shaping_produces_nonzero_value_targets(self):
+        _, stats = train_alphazero_self_play(
+            games=1,
+            simulations=1,
+            max_turns=1,
+            hidden_size=32,
+            action_limit=4,
+            wall_limit=2,
+            batch_size=1,
+            epochs_per_game=1,
+            draw_value_mode="heuristic",
+            seed=2,
+            device="cpu",
+        )
+
+        self.assertEqual(stats.draws, 1)
+        self.assertGreater(stats.value_nonzero_examples, 0)
+        self.assertGreater(stats.value_mean_abs, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

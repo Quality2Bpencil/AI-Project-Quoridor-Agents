@@ -11,7 +11,7 @@
       "games": 64,
       "chunk_games": 16,
       "simulations": 8,
-      "max_turns": 120,
+      "max_turns": 100,
       "hidden_size": 256,
       "action_limit": 10,
       "wall_limit": 5,
@@ -19,14 +19,16 @@
       "epochs_per_game": 1,
       "lr": 0.001,
       "temperature_turns": 18,
-      "replay_capacity": 20000
+      "replay_capacity": 20000,
+      "draw_value_mode": "heuristic",
+      "draw_value_scale": 40.0
     },
     {
       "name": "bootstrap",
       "games": 512,
       "chunk_games": 64,
       "simulations": 16,
-      "max_turns": 140,
+      "max_turns": 120,
       "hidden_size": 256,
       "action_limit": 14,
       "wall_limit": 7,
@@ -34,14 +36,16 @@
       "epochs_per_game": 1,
       "lr": 0.0008,
       "temperature_turns": 16,
-      "replay_capacity": 60000
+      "replay_capacity": 60000,
+      "draw_value_mode": "heuristic",
+      "draw_value_scale": 40.0
     },
     {
       "name": "policy_improvement",
       "games": 4096,
       "chunk_games": 128,
       "simulations": 48,
-      "max_turns": 170,
+      "max_turns": 150,
       "hidden_size": 256,
       "action_limit": 22,
       "wall_limit": 10,
@@ -49,14 +53,16 @@
       "epochs_per_game": 1,
       "lr": 0.0004,
       "temperature_turns": 12,
-      "replay_capacity": 160000
+      "replay_capacity": 160000,
+      "draw_value_mode": "heuristic",
+      "draw_value_scale": 40.0
     },
     {
       "name": "champion_search",
       "games": 16384,
       "chunk_games": 256,
       "simulations": 96,
-      "max_turns": 190,
+      "max_turns": 170,
       "hidden_size": 256,
       "action_limit": 30,
       "wall_limit": 14,
@@ -64,7 +70,9 @@
       "epochs_per_game": 1,
       "lr": 0.0002,
       "temperature_turns": 10,
-      "replay_capacity": 320000
+      "replay_capacity": 320000,
+      "draw_value_mode": "heuristic",
+      "draw_value_scale": 40.0
     }
   ],
   "arena_gating": {

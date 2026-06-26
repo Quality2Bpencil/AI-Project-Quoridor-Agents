@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass
+from math import tanh
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -13,6 +14,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from quoridor import QuoridorEnv
+from quoridor.agents.heuristics import evaluate_state
 from quoridor.core.actions import Action
 from quoridor.training.discrete_env import ACTION_SIZE, DiscreteQuoridorEnv
 from quoridor.training.discrete_env import action_to_id
@@ -65,6 +67,8 @@ class AlphaZeroSelfPlayStats:
     draws: int
     device: str
     elapsed_seconds: float
+    value_mean_abs: float = 0.0
+    value_nonzero_examples: int = 0
 
 
 def default_obs_dim() -> int:
@@ -107,6 +111,8 @@ def train_alphazero_self_play(
     lr: float = 1e-3,
     temperature_turns: int = 8,
     replay_capacity: int = 100_000,
+    draw_value_mode: str = "zero",
+    draw_value_scale: float = 40.0,
     seed: int | None = None,
     device: str | None = None,
     initial_checkpoint: str | Path | None = None,
@@ -119,6 +125,10 @@ def train_alphazero_self_play(
         raise ValueError("batch_size must be at least 1")
     if replay_capacity < batch_size:
         raise ValueError("replay_capacity must be at least batch_size")
+    if draw_value_mode not in {"zero", "heuristic"}:
+        raise ValueError("draw_value_mode must be 'zero' or 'heuristic'")
+    if draw_value_scale <= 0:
+        raise ValueError("draw_value_scale must be positive")
 
     rng = random.Random(seed)
     torch.manual_seed(seed or 0)
@@ -135,6 +145,8 @@ def train_alphazero_self_play(
     draws = 0
     updates = 0
     total_examples = 0
+    value_abs_total = 0.0
+    value_nonzero_examples = 0
     started = time.perf_counter()
 
     for _ in range(games):
@@ -168,6 +180,11 @@ def train_alphazero_self_play(
             value = 0.0
             if env.state.winner is not None:
                 value = 1.0 if env.state.winner == player else -1.0
+            elif draw_value_mode == "heuristic":
+                value = _draw_value_target(env.state, player, draw_value_scale)
+            value_abs_total += abs(value)
+            if abs(value) > 1e-9:
+                value_nonzero_examples += 1
             replay.append(AlphaZeroExample(observation=observation, policy=policy, value=value))
         total_examples += len(pending)
         if len(replay) > replay_capacity:
@@ -183,6 +200,8 @@ def train_alphazero_self_play(
         draws=draws,
         device=str(selected_device),
         elapsed_seconds=time.perf_counter() - started,
+        value_mean_abs=value_abs_total / total_examples if total_examples else 0.0,
+        value_nonzero_examples=value_nonzero_examples,
     )
     return model, stats
 
@@ -246,6 +265,10 @@ def _model_value(model: AlphaZeroNet, device: torch.device, state: object, root_
     current_value = float(value.squeeze(0).item())
     current_player = getattr(state, "current_player")
     return current_value if current_player == root_player else -current_value
+
+
+def _draw_value_target(state: object, player: int, scale: float) -> float:
+    return tanh(evaluate_state(state, player) / scale)  # type: ignore[arg-type]
 
 
 def _sample_policy_action(policy: Mapping[Action, float], rng: random.Random) -> Action:

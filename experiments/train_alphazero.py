@@ -26,6 +26,8 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--temperature-turns", type=int, default=8)
     parser.add_argument("--replay-capacity", type=int, default=100_000)
+    parser.add_argument("--draw-value-mode", choices=("zero", "heuristic"), default="zero")
+    parser.add_argument("--draw-value-scale", type=float, default=40.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default=None)
     parser.add_argument("--resume-from", default=None)
@@ -44,6 +46,8 @@ def main() -> None:
         lr=args.lr,
         temperature_turns=args.temperature_turns,
         replay_capacity=args.replay_capacity,
+        draw_value_mode=args.draw_value_mode,
+        draw_value_scale=args.draw_value_scale,
         seed=args.seed,
         device=args.device,
         initial_checkpoint=args.resume_from,
@@ -64,6 +68,10 @@ def main() -> None:
             "action_limit": args.action_limit,
             "wall_limit": args.wall_limit,
             "replay_capacity": args.replay_capacity,
+            "draw_value_mode": args.draw_value_mode,
+            "draw_value_scale": args.draw_value_scale,
+            "value_mean_abs": stats.value_mean_abs,
+            "value_nonzero_examples": stats.value_nonzero_examples,
             "resume_from": args.resume_from,
         },
     )
@@ -77,6 +85,8 @@ def main() -> None:
             "wins": stats.wins,
             "draws": stats.draws,
             "device": stats.device,
+            "value_mean_abs": round(stats.value_mean_abs, 6),
+            "value_nonzero_examples": stats.value_nonzero_examples,
             "elapsed_seconds": round(stats.elapsed_seconds, 3),
         },
     )

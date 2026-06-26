@@ -30,6 +30,8 @@ TRAIN_KEYS = {
     "lr",
     "temperature_turns",
     "replay_capacity",
+    "draw_value_mode",
+    "draw_value_scale",
 }
 
 
@@ -193,6 +195,8 @@ def _run_stage(
                 "updates": stats.updates,
                 "wins": stats.wins,
                 "draws": stats.draws,
+                "value_mean_abs": round(stats.value_mean_abs, 6),
+                "value_nonzero_examples": stats.value_nonzero_examples,
                 "elapsed_seconds": round(stats.elapsed_seconds, 3),
             },
         )

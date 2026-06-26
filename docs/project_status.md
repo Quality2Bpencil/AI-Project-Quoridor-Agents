@@ -480,10 +480,12 @@ F:\Programs\PythonEnv\torch10\python.exe experiments\train_alphazero.py --games 
 
 | Stage | Games | Chunk | Simulations | Max turns | Action / wall budget | Batch | Replay cap | 目的 |
 | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |
-| remote_validation | 64 | 16 | 8 | 120 | 10 / 5 | 64 | 20,000 | 验证远程 CUDA、依赖、checkpoint 恢复和吞吐。 |
-| bootstrap | 512 | 64 | 16 | 140 | 14 / 7 | 128 | 60,000 | 初步摆脱随机 policy，学习基本 race / block 模式。 |
-| policy_improvement | 4,096 | 128 | 48 | 170 | 22 / 10 | 256 | 160,000 | 形成可对抗 heuristic PUCT/MCTS 的候选策略。 |
-| champion_search | 16,384 | 256 | 96 | 190 | 30 / 14 | 512 | 320,000 | 长跑候选冠军 checkpoint。 |
+| remote_validation | 64 | 16 | 8 | 100 | 10 / 5 | 64 | 20,000 | 验证远程 CUDA、依赖、checkpoint 恢复和吞吐。 |
+| bootstrap | 512 | 64 | 16 | 120 | 14 / 7 | 128 | 60,000 | 初步摆脱随机 policy，学习基本 race / block 模式。 |
+| policy_improvement | 4,096 | 128 | 48 | 150 | 22 / 10 | 256 | 160,000 | 形成可对抗 heuristic PUCT/MCTS 的候选策略。 |
+| champion_search | 16,384 | 256 | 96 | 170 | 30 / 14 | 512 | 320,000 | 长跑候选冠军 checkpoint。 |
+
+2026-06-26 远程早期训练观察到大量 max-turn draw，导致 value target 接近全 0。已将配置调整为 `draw_value_mode = "heuristic"`：真实胜负仍使用 `+1/-1`，但 max-turn draw 会使用当前启发式局面估值经 `tanh(score / 40.0)` 压缩后作为弱 value target；同时略微降低早期 `max_turns`，减少低信息量拖平局样本。
 
 远程 Ubuntu 建议启动命令：
 
