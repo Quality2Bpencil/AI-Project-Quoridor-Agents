@@ -28,6 +28,8 @@ def main() -> None:
     parser.add_argument("--replay-capacity", type=int, default=100_000)
     parser.add_argument("--draw-value-mode", choices=("zero", "heuristic"), default="zero")
     parser.add_argument("--draw-value-scale", type=float, default=40.0)
+    parser.add_argument("--root-dirichlet-alpha", type=float, default=0.3)
+    parser.add_argument("--root-noise-fraction", type=float, default=0.25)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default=None)
     parser.add_argument("--resume-from", default=None)
@@ -48,6 +50,8 @@ def main() -> None:
         replay_capacity=args.replay_capacity,
         draw_value_mode=args.draw_value_mode,
         draw_value_scale=args.draw_value_scale,
+        root_dirichlet_alpha=args.root_dirichlet_alpha,
+        root_noise_fraction=args.root_noise_fraction,
         seed=args.seed,
         device=args.device,
         initial_checkpoint=args.resume_from,
@@ -70,6 +74,8 @@ def main() -> None:
             "replay_capacity": args.replay_capacity,
             "draw_value_mode": args.draw_value_mode,
             "draw_value_scale": args.draw_value_scale,
+            "root_dirichlet_alpha": args.root_dirichlet_alpha,
+            "root_noise_fraction": args.root_noise_fraction,
             "value_mean_abs": stats.value_mean_abs,
             "value_nonzero_examples": stats.value_nonzero_examples,
             "resume_from": args.resume_from,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass, field
 from typing import Callable, Mapping, Sequence
 
@@ -55,6 +56,8 @@ class PUCTAgent:
         wall_candidate_margin: float = 0.0,
         root_blunder_margin: float = 1.0,
         tactical_shortcut_margin: float = 18.0,
+        root_dirichlet_alpha: float = 0.3,
+        root_noise_fraction: float = 0.0,
         prior_fn: PriorFn | None = None,
         value_fn: ValueFn | None = None,
         seed: int | None = None,
@@ -67,6 +70,10 @@ class PUCTAgent:
             raise ValueError("prior_temperature must be positive")
         if value_scale <= 0.0:
             raise ValueError("value_scale must be positive")
+        if root_dirichlet_alpha <= 0.0:
+            raise ValueError("root_dirichlet_alpha must be positive")
+        if not 0.0 <= root_noise_fraction <= 1.0:
+            raise ValueError("root_noise_fraction must be in [0, 1]")
         self.simulations = simulations
         self.c_puct = c_puct
         self.action_limit = action_limit
@@ -78,9 +85,12 @@ class PUCTAgent:
         self.wall_candidate_margin = wall_candidate_margin
         self.root_blunder_margin = root_blunder_margin
         self.tactical_shortcut_margin = tactical_shortcut_margin
+        self.root_dirichlet_alpha = root_dirichlet_alpha
+        self.root_noise_fraction = root_noise_fraction
         self.prior_fn = prior_fn
         self.value_fn = value_fn
         self.seed = seed
+        self.rng = random.Random(seed)
         self._candidate_cache: dict[QuoridorState, list[Action]] = {}
         self._transition_cache: dict[tuple[QuoridorState, Action], QuoridorState] = {}
 
@@ -163,7 +173,7 @@ class PUCTAgent:
         root_player: int,
     ) -> _PUCTNode:
         root = _PUCTNode(state=state)
-        self._expand(root, root_player, legal_actions)
+        self._expand(root, root_player, legal_actions, is_root=True)
 
         for _ in range(self.simulations):
             node = root
@@ -182,11 +192,15 @@ class PUCTAgent:
         node: _PUCTNode,
         root_player: int,
         legal_actions: Sequence[Action] | None = None,
+        *,
+        is_root: bool = False,
     ) -> None:
         actions = self._candidate_actions(node.state, legal_actions)
         if not actions:
             return
         priors = self._priors(node.state, actions, root_player)
+        if is_root and self.root_noise_fraction > 0.0:
+            priors = self._add_root_noise(actions, priors)
         for action in actions:
             if action in node.children:
                 continue
@@ -278,6 +292,17 @@ class PUCTAgent:
             uniform = 1.0 / len(actions)
             return {action: uniform for action in actions}
         return {action: weight / total for action, weight in zip(actions, weights)}
+
+    def _add_root_noise(self, actions: Sequence[Action], priors: dict[Action, float]) -> dict[Action, float]:
+        noise = [self.rng.gammavariate(self.root_dirichlet_alpha, 1.0) for _ in actions]
+        total_noise = sum(noise)
+        if total_noise <= 0.0:
+            return priors
+        return {
+            action: (1.0 - self.root_noise_fraction) * priors.get(action, 0.0)
+            + self.root_noise_fraction * noise_value / total_noise
+            for action, noise_value in zip(actions, noise)
+        }
 
     def _select_child(self, node: _PUCTNode, root_player: int) -> _PUCTNode:
         maximizing_root_value = node.state.current_player == root_player

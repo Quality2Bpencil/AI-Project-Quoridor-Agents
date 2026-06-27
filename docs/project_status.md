@@ -417,6 +417,8 @@ python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --m
   - 输出 visit-count policy distribution，用于 AlphaZero 自对弈训练 target。
 - `experiments/train_alphazero.py`
   - 运行小规模 AlphaZero-style self-play 训练并保存 checkpoint。
+- `experiments/train_alphazero_teacher_bootstrap.py`
+  - 并行生成 PUCT / Minimax / MCTS / trap-aware teacher 数据，再用大 batch 监督训练 policy/value 网络。
 
 ### 参考成熟做法
 
@@ -486,6 +488,25 @@ F:\Programs\PythonEnv\torch10\python.exe experiments\train_alphazero.py --games 
 | champion_search | 16,384 | 256 | 96 | 170 | 30 / 14 | 512 | 320,000 | 长跑候选冠军 checkpoint。 |
 
 2026-06-26 远程早期训练观察到大量 max-turn draw，导致 value target 接近全 0。已将配置调整为 `draw_value_mode = "heuristic"`：真实胜负仍使用 `+1/-1`，但 max-turn draw 会使用当前启发式局面估值经 `tanh(score / 40.0)` 压缩后作为弱 value target；同时略微降低早期 `max_turns`，减少低信息量拖平局样本。
+
+2026-06-27 进一步观察显示 shaped self-play 虽然不再是全 0 value target，但真实胜负仍几乎全是 draw，且部分 worker 的 `value_mean_abs` 会逐步塌到接近 0。结论：继续直接长训不是优先路线。已新增 infra-first 路线：
+
+- `generate_teacher_bootstrap_examples(...)`：用多个 CPU worker 并行生成 teacher 数据。
+- teacher pool：当前强 heuristic PUCT、Minimax、MCTS、DepthTrap、CounterTrap。
+- policy target：PUCT 使用 visit-count policy；其他 teacher 使用 one-hot teacher action。
+- value target：真实胜负优先；max-turn draw 使用轻量启发式 value shaping。
+- `train_alphazero_examples(...)`：把 teacher 样本一次性/分块送入 GPU，支持 `batch_size >= 128` 的监督训练。
+- MCTS rollout value 改为 `tanh(evaluate / scale)`，避免 UCT 被未归一化启发式值支配。
+- PUCT 支持 AlphaZero 常用 root Dirichlet noise，self-play 默认启用探索噪声。
+
+新的远程 bootstrap 建议先跑：
+
+```bash
+cd /home/lc/quoridor
+CUDA_VISIBLE_DEVICES=0 .venv/bin/python experiments/train_alphazero_teacher_bootstrap.py --games 512 --max-turns 100 --workers 16 --teacher-profile mixed_strong --hidden-size 256 --batch-size 256 --epochs 4 --device cuda --output experiments/results/alphazero_teacher_bootstrap.pt
+```
+
+如果这一步能生成非零 value、较低 draw 或至少明显 teacher policy 信号，再用该 checkpoint 作为 `experiments/run_alphazero_config.py` 的 `initial_checkpoint` 进入 self-play。
 
 远程 Ubuntu 建议启动命令：
 

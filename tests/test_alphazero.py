@@ -12,8 +12,10 @@ from quoridor.training.alphazero import (
     default_obs_dim,
     policy_vector,
     save_alphazero_checkpoint,
+    train_alphazero_examples,
     train_alphazero_self_play,
 )
+from quoridor.training.teacher_bootstrap import generate_teacher_bootstrap_examples
 
 
 class AlphaZeroTests(unittest.TestCase):
@@ -135,6 +137,53 @@ class AlphaZeroTests(unittest.TestCase):
         self.assertEqual(stats.draws, 1)
         self.assertGreater(stats.value_nonzero_examples, 0)
         self.assertGreater(stats.value_mean_abs, 0.0)
+
+    def test_batched_example_training_smoke(self):
+        env = QuoridorEnv()
+        legal = env.legal_actions()
+        examples = [
+            self._example(env, legal[0], 0.5),
+            self._example(env, legal[1], -0.5),
+        ]
+
+        model, stats = train_alphazero_examples(
+            examples,
+            hidden_size=32,
+            batch_size=2,
+            epochs=1,
+            seed=0,
+            device="cpu",
+        )
+
+        self.assertIsInstance(model, AlphaZeroNet)
+        self.assertEqual(stats.examples, 2)
+        self.assertEqual(stats.batch_size, 2)
+        self.assertEqual(stats.updates, 1)
+
+    def test_teacher_bootstrap_generation_smoke(self):
+        examples, stats = generate_teacher_bootstrap_examples(
+            games=1,
+            max_turns=2,
+            seed=0,
+            workers=1,
+            teacher_profile="fast",
+        )
+
+        self.assertGreater(len(examples), 0)
+        self.assertEqual(stats.games, 1)
+        self.assertEqual(stats.examples, len(examples))
+
+    def _example(self, env: QuoridorEnv, action, value: float):
+        from quoridor.training.alphazero import AlphaZeroExample
+        from quoridor.training.discrete_env import DiscreteQuoridorEnv
+
+        wrapper = DiscreteQuoridorEnv()
+        wrapper.env.state = env.state
+        return AlphaZeroExample(
+            observation=wrapper.flat_observation(),
+            policy=policy_vector({action: 1.0}),
+            value=value,
+        )
 
 
 if __name__ == "__main__":

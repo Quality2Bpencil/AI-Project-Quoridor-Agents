@@ -40,12 +40,15 @@ class MCTSAgent:
         wall_candidate_margin: float = 0.0,
         root_blunder_margin: float = 1.0,
         tactical_shortcut_margin: float = 18.0,
+        value_scale: float = 30.0,
         seed: int | None = None,
     ) -> None:
         if iterations < 1:
             raise ValueError("iterations must be at least 1")
         if not 0.0 <= rollout_move_probability <= 1.0:
             raise ValueError("rollout_move_probability must be in [0, 1]")
+        if value_scale <= 0.0:
+            raise ValueError("value_scale must be positive")
         self.iterations = iterations
         self.exploration = exploration
         self.rollout_depth = rollout_depth
@@ -57,6 +60,7 @@ class MCTSAgent:
         self.wall_candidate_margin = wall_candidate_margin
         self.root_blunder_margin = root_blunder_margin
         self.tactical_shortcut_margin = tactical_shortcut_margin
+        self.value_scale = value_scale
         self.rng = random.Random(seed)
         self._candidate_cache: dict[QuoridorState, list[Action]] = {}
         self._transition_cache: dict[tuple[QuoridorState, Action], QuoridorState] = {}
@@ -206,7 +210,7 @@ class MCTSAgent:
             if action is None:
                 break
             current = self._apply_action(current, action)
-        return evaluate_state(current, root_player)
+        return math.tanh(evaluate_state(current, root_player) / self.value_scale)
 
     def _rollout_policy_action(self, state: QuoridorState) -> Action | None:
         move_actions: list[Action] = list(legal_pawn_moves(state))

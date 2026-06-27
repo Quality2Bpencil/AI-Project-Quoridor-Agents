@@ -32,6 +32,8 @@ TRAIN_KEYS = {
     "replay_capacity",
     "draw_value_mode",
     "draw_value_scale",
+    "root_dirichlet_alpha",
+    "root_noise_fraction",
 }
 
 

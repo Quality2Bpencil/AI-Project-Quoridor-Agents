@@ -73,6 +73,19 @@ class AlphaZeroSelfPlayStats:
     value_nonzero_examples: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class AlphaZeroTrainStats:
+    examples: int
+    updates: int
+    epochs: int
+    batch_size: int
+    device: str
+    elapsed_seconds: float
+    loss: float
+    value_mean_abs: float = 0.0
+    value_nonzero_examples: int = 0
+
+
 def default_obs_dim() -> int:
     env = DiscreteQuoridorEnv()
     env.reset()
@@ -115,6 +128,8 @@ def train_alphazero_self_play(
     replay_capacity: int = 100_000,
     draw_value_mode: str = "zero",
     draw_value_scale: float = 40.0,
+    root_dirichlet_alpha: float = 0.3,
+    root_noise_fraction: float = 0.25,
     seed: int | None = None,
     device: str | None = None,
     initial_checkpoint: str | Path | None = None,
@@ -165,6 +180,8 @@ def train_alphazero_self_play(
                 wall_limit=wall_limit,
                 prior_fn=lambda state, actions: _model_policy_prior(model, selected_device, state, actions),
                 value_fn=lambda state, root_player: _model_value(model, selected_device, state, root_player),
+                root_dirichlet_alpha=root_dirichlet_alpha,
+                root_noise_fraction=root_noise_fraction,
                 seed=rng.randrange(2**31),
             )
             temperature = 1.0 if env.state.turn_count < temperature_turns else 0.0
@@ -203,6 +220,75 @@ def train_alphazero_self_play(
         device=str(selected_device),
         elapsed_seconds=time.perf_counter() - started,
         value_mean_abs=value_abs_total / total_examples if total_examples else 0.0,
+        value_nonzero_examples=value_nonzero_examples,
+    )
+    return model, stats
+
+
+def train_alphazero_examples(
+    examples: Sequence[AlphaZeroExample],
+    *,
+    hidden_size: int = 256,
+    batch_size: int = 256,
+    epochs: int = 4,
+    lr: float = 1e-3,
+    seed: int | None = None,
+    device: str | None = None,
+    initial_checkpoint: str | Path | None = None,
+) -> tuple[AlphaZeroNet, AlphaZeroTrainStats]:
+    if not examples:
+        raise ValueError("examples must not be empty")
+    if batch_size < 1:
+        raise ValueError("batch_size must be at least 1")
+    if epochs < 1:
+        raise ValueError("epochs must be at least 1")
+
+    torch.manual_seed(seed or 0)
+    selected_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    if initial_checkpoint is not None:
+        checkpoint = load_alphazero_checkpoint(initial_checkpoint, device=selected_device)
+        model = checkpoint.model
+    else:
+        model = AlphaZeroNet(default_obs_dim(), hidden_size=hidden_size).to(selected_device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, amsgrad=True)
+
+    observations = torch.tensor([item.observation for item in examples], dtype=torch.float32)
+    target_policy = torch.tensor([item.policy for item in examples], dtype=torch.float32)
+    target_value = torch.tensor([item.value for item in examples], dtype=torch.float32)
+    value_abs_total = float(target_value.abs().sum().item())
+    value_nonzero_examples = int((target_value.abs() > 1e-9).sum().item())
+
+    generator = torch.Generator()
+    generator.manual_seed(seed or 0)
+    started = time.perf_counter()
+    updates = 0
+    last_loss = 0.0
+    model.train()
+    for _ in range(epochs):
+        order = torch.randperm(len(examples), generator=generator)
+        for start in range(0, len(examples), batch_size):
+            batch_ids = order[start : start + batch_size]
+            obs_batch = observations[batch_ids].to(selected_device, non_blocking=True)
+            policy_batch = target_policy[batch_ids].to(selected_device, non_blocking=True)
+            value_batch = target_value[batch_ids].to(selected_device, non_blocking=True)
+            policy_logits, values = model(obs_batch)
+            loss = alphazero_loss(policy_logits, values, policy_batch, value_batch)
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            optimizer.step()
+            updates += 1
+            last_loss = float(loss.detach().cpu().item())
+    model.eval()
+    stats = AlphaZeroTrainStats(
+        examples=len(examples),
+        updates=updates,
+        epochs=epochs,
+        batch_size=batch_size,
+        device=str(selected_device),
+        elapsed_seconds=time.perf_counter() - started,
+        loss=last_loss,
+        value_mean_abs=value_abs_total / len(examples),
         value_nonzero_examples=value_nonzero_examples,
     )
     return model, stats
