@@ -77,6 +77,8 @@ The final strong-agent direction is AlphaZero-style self-play rather than DQN-on
 - `alphazero_loss(...)` combines value regression and policy cross entropy.
 - `experiments/train_alphazero.py` starts a single self-play training run and writes `experiments/results/alphazero_policy_value.pt`.
 - `experiments/run_alphazero_config.py` runs staged, chunked, resumable long training from `experiments/configs/alphazero_remote_long.json`.
+- `AlphaZeroBatchEvaluator` batches policy/value network calls for PUCT leaf expansion and avoids duplicate prior/value inference for the same state.
+- `experiments/run_batched_selfplay.py` generates self-play shards with arena-style workers and can train on the merged examples with large minibatches.
 
 Long-run training loop:
 
@@ -85,6 +87,8 @@ Long-run training loop:
 3. Train `AlphaZeroNet` on replayed self-play examples.
 4. Evaluate candidate checkpoint in the arena against current best and enhanced heuristic baselines.
 5. Promote only if the candidate passes a fixed score-rate threshold.
+
+The current implementation now separates three engineering concerns that should be reported distinctly in the paper: teacher bootstrap data, batched MCTS self-play data generation, and arena gating. This is important because early experiments showed that naive serial self-play mostly produced max-turn draws and left GPU inference underutilized. The updated path uses batched PUCT leaf evaluation plus parallel self-play shards before large-batch supervised/RL updates.
 
 An initial smoke checkpoint has been produced from 2 self-play games with 60 examples and 2 optimizer updates on CUDA. This only validates the training/checkpoint path; it is not a claim of strong play. The remote long-run config intentionally starts from scratch with a clean 256-hidden policy/value network.
 

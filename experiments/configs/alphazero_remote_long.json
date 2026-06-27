@@ -23,7 +23,9 @@
       "draw_value_mode": "heuristic",
       "draw_value_scale": 40.0,
       "root_dirichlet_alpha": 0.3,
-      "root_noise_fraction": 0.25
+      "root_noise_fraction": 0.25,
+      "mcts_batch_size": 4,
+      "inference_cache_size": 2048
     },
     {
       "name": "bootstrap",
@@ -42,7 +44,9 @@
       "draw_value_mode": "heuristic",
       "draw_value_scale": 40.0,
       "root_dirichlet_alpha": 0.3,
-      "root_noise_fraction": 0.25
+      "root_noise_fraction": 0.25,
+      "mcts_batch_size": 8,
+      "inference_cache_size": 4096
     },
     {
       "name": "policy_improvement",
@@ -61,7 +65,9 @@
       "draw_value_mode": "heuristic",
       "draw_value_scale": 40.0,
       "root_dirichlet_alpha": 0.3,
-      "root_noise_fraction": 0.2
+      "root_noise_fraction": 0.2,
+      "mcts_batch_size": 16,
+      "inference_cache_size": 8192
     },
     {
       "name": "champion_search",
@@ -80,7 +86,9 @@
       "draw_value_mode": "heuristic",
       "draw_value_scale": 40.0,
       "root_dirichlet_alpha": 0.3,
-      "root_noise_fraction": 0.15
+      "root_noise_fraction": 0.15,
+      "mcts_batch_size": 16,
+      "inference_cache_size": 16384
     }
   ],
   "arena_gating": {

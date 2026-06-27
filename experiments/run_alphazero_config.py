@@ -34,6 +34,8 @@ TRAIN_KEYS = {
     "draw_value_scale",
     "root_dirichlet_alpha",
     "root_noise_fraction",
+    "mcts_batch_size",
+    "inference_cache_size",
 }
 
 

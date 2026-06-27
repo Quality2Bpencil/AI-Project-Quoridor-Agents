@@ -30,6 +30,8 @@ def main() -> None:
     parser.add_argument("--draw-value-scale", type=float, default=40.0)
     parser.add_argument("--root-dirichlet-alpha", type=float, default=0.3)
     parser.add_argument("--root-noise-fraction", type=float, default=0.25)
+    parser.add_argument("--mcts-batch-size", type=int, default=1)
+    parser.add_argument("--inference-cache-size", type=int, default=4096)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default=None)
     parser.add_argument("--resume-from", default=None)
@@ -52,6 +54,8 @@ def main() -> None:
         draw_value_scale=args.draw_value_scale,
         root_dirichlet_alpha=args.root_dirichlet_alpha,
         root_noise_fraction=args.root_noise_fraction,
+        mcts_batch_size=args.mcts_batch_size,
+        inference_cache_size=args.inference_cache_size,
         seed=args.seed,
         device=args.device,
         initial_checkpoint=args.resume_from,
@@ -76,6 +80,8 @@ def main() -> None:
             "draw_value_scale": args.draw_value_scale,
             "root_dirichlet_alpha": args.root_dirichlet_alpha,
             "root_noise_fraction": args.root_noise_fraction,
+            "mcts_batch_size": args.mcts_batch_size,
+            "inference_cache_size": args.inference_cache_size,
             "value_mean_abs": stats.value_mean_abs,
             "value_nonzero_examples": stats.value_nonzero_examples,
             "resume_from": args.resume_from,
@@ -91,6 +97,7 @@ def main() -> None:
             "wins": stats.wins,
             "draws": stats.draws,
             "device": stats.device,
+            "mcts_batch_size": stats.mcts_batch_size,
             "value_mean_abs": round(stats.value_mean_abs, 6),
             "value_nonzero_examples": stats.value_nonzero_examples,
             "elapsed_seconds": round(stats.elapsed_seconds, 3),

@@ -42,6 +42,32 @@ class PUCTAgentTests(unittest.TestCase):
         self.assertEqual(set(policy), set(env.legal_actions()))
         self.assertAlmostEqual(sum(policy.values()), 1.0)
 
+    def test_puct_can_batch_leaf_evaluations(self):
+        env = QuoridorEnv()
+        batch_sizes = []
+
+        def evaluate(requests):
+            batch_sizes.append(len(requests))
+            output = []
+            for _, actions, _ in requests:
+                prior = 1.0 / len(actions)
+                output.append(({action: prior for action in actions}, 0.0))
+            return output
+
+        agent = PUCTAgent(
+            simulations=4,
+            action_limit=6,
+            wall_limit=3,
+            tactical_shortcut_margin=999.0,
+            policy_value_batch_fn=evaluate,
+            inference_batch_size=2,
+        )
+
+        policy = agent.search_policy(env.state, env.legal_actions())
+
+        self.assertAlmostEqual(sum(policy.values()), 1.0)
+        self.assertTrue(any(size > 1 for size in batch_sizes))
+
 
 if __name__ == "__main__":
     unittest.main()

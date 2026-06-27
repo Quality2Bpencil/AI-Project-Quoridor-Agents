@@ -7,9 +7,11 @@ import torch
 from quoridor import QuoridorEnv
 from quoridor.agents import AlphaZeroAgent
 from quoridor.training.alphazero import (
+    AlphaZeroBatchEvaluator,
     AlphaZeroNet,
     alphazero_loss,
     default_obs_dim,
+    generate_alphazero_self_play_examples,
     policy_vector,
     save_alphazero_checkpoint,
     train_alphazero_examples,
@@ -65,6 +67,21 @@ class AlphaZeroTests(unittest.TestCase):
 
         self.assertAlmostEqual(sum(vector), 1.0)
         self.assertGreater(float(loss.item()), 0.0)
+
+    def test_batch_evaluator_returns_priors_and_values(self):
+        env = QuoridorEnv()
+        model = AlphaZeroNet(default_obs_dim(), hidden_size=32)
+        evaluator = AlphaZeroBatchEvaluator(model, torch.device("cpu"), cache_size=8)
+        legal = env.legal_actions()
+
+        results = evaluator.evaluate([(env.state, legal[:4], env.state.current_player)])
+
+        self.assertEqual(len(results), 1)
+        priors, value = results[0]
+        self.assertEqual(set(priors), set(legal[:4]))
+        self.assertAlmostEqual(sum(priors.values()), 1.0, places=6)
+        self.assertGreaterEqual(value, -1.0)
+        self.assertLessEqual(value, 1.0)
 
     def test_self_play_training_smoke(self):
         model, stats = train_alphazero_self_play(
@@ -159,6 +176,25 @@ class AlphaZeroTests(unittest.TestCase):
         self.assertEqual(stats.examples, 2)
         self.assertEqual(stats.batch_size, 2)
         self.assertEqual(stats.updates, 1)
+
+    def test_batched_self_play_generation_smoke(self):
+        examples, stats = generate_alphazero_self_play_examples(
+            games=1,
+            simulations=2,
+            max_turns=3,
+            hidden_size=32,
+            action_limit=4,
+            wall_limit=2,
+            mcts_batch_size=2,
+            seed=0,
+            device="cpu",
+            workers=1,
+        )
+
+        self.assertGreater(len(examples), 0)
+        self.assertEqual(stats.games, 1)
+        self.assertEqual(stats.examples, len(examples))
+        self.assertEqual(stats.mcts_batch_size, 2)
 
     def test_teacher_bootstrap_generation_smoke(self):
         examples, stats = generate_teacher_bootstrap_examples(

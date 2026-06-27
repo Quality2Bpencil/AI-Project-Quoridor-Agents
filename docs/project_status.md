@@ -29,7 +29,7 @@ proposal 中的研究路线可以拆成四层：
    - Neural-pruned MCTS / PUCT。
    - Approximate Q-Learning / Deep Q victim。
 
-当前仓库已经完成第 1-3 层，并补齐了第 4 层的可运行初版：tabular Q-learning、linear Approx-Q、Torch Deep-Q、Argmax-Q victim trap，以及 heuristic-prior PUCT。真正神经网络 policy-value PUCT 仍未实现。
+当前仓库已经完成第 1-3 层，并补齐了第 4 层的可运行初版：tabular Q-learning、linear Approx-Q、Torch Deep-Q、Argmax-Q victim trap、heuristic-prior PUCT，以及 AlphaZero-style policy/value PUCT 接口。真正强度仍取决于后续长训练 checkpoint 和 arena gating。
 
 ## 当前已实现
 
@@ -74,69 +74,11 @@ proposal 中的研究路线可以拆成四层：
 | --- | --- | --- |
 | Argmax RL victim exploitation | 已完成初版，待正式实验 | 已有 deterministic Q victim 和 `ArgmaxQTrapAgent`；仍需训练稳定 Q-table 并跑 exploit 对照。 |
 | Approximate Q-Learning / Deep Q victim | 已完成初版，待正式实验 | 已有 linear feature Q-function、Torch DQN、训练脚本和 checkpoint 加载 agent。 |
-| Neural-pruned MCTS / PUCT | heuristic-prior PUCT 已完成，neural prior/value 未实现 | 已有 PUCT search 接口；后续训练 policy/value model 后可替换默认启发式 prior/value。 |
+| Neural-pruned MCTS / PUCT | AlphaZero-style 接口已完成，强 checkpoint 未完成 | 已有 PUCT search、neural prior/value、batched evaluator；后续需要长训练和 arena gating。 |
 | 1000+ rounds 正式实验 | 未完成 | 当前只有轻量 tournament/ablation 脚本；需要固定 seeds、参数表、正式 CSV 和汇总。 |
 | 论文/报告级结果表 | 部分完成 | Arena 已可输出 matchup matrix 和 score matrix；仍需正式长跑数据。 |
 | 学术论文稿件 | 已完成骨架 | `docs/paper_draft.md` 已建立论文结构、方法映射、实验待办和未验证结果占位。 |
 | Web UI 离线资源 | 部分完成 | pawn 模型已本地化；Three.js 仍从 CDN 加载，完全离线展示需要 vendored JS 或构建流程。 |
-
-## 当前验证状态
-
-最近一次验证命令：
-
-```powershell
-node --check quoridor\web\static\app.js
-python -m unittest discover -s tests -v
-```
-
-验证结果：
-
-- JavaScript 语法检查通过。
-- Python 单元测试通过，当前测试数为 58。
-- Web UI 已在本地 `http://127.0.0.1:8766` 做过桌面和移动视口 smoke check。
-
-## 算法审计记录
-
-2026-06-25 先审计现有算法，再进入新算法设计。当前结论：
-
-- 核心规则、训练接口、Web session、Greedy BFS、Minimax、MCTS、PathLure、DepthTrap、RolloutPoison 的单元测试全部通过。
-- `experiments/run_tournament.py --preset smoke --games-per-pair 1 --max-turns 30` 已通过并写出 CSV。
-- `experiments/run_tournament.py --preset adversarial --games-per-pair 1 --max-turns 5` 已通过并写出 CSV，但全量 adversarial preset 比较慢，后续正式实验前需要单独做性能预算和参数表。
-- 修正了 evaluation 中的 `trap_events` 统计语义：现在只统计对手从非陷阱状态进入陷阱状态的转移，不再在陷阱持续存在时每回合重复计数。
-
-本轮新增验证命令：
-
-```powershell
-python -m compileall -q quoridor tests experiments
-python -m unittest discover -s tests -v
-python experiments\run_tournament.py --preset smoke --games-per-pair 1 --max-turns 30 --output tmp\algorithm_audit_tournament_smoke_after.csv
-python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --max-turns 5 --output tmp\algorithm_audit_tournament_adversarial_tiny.csv
-```
-
-本轮 RL / PUCT 验证命令：
-
-```powershell
-python -m unittest tests.test_approx_q tests.test_puct tests.test_q_learning tests.test_search_agents -v
-python experiments\train_q_learning.py --episodes 3 --max-turns 8 --output tmp\q_learning_smoke_policy.json
-python experiments\train_approx_q.py --episodes 3 --max-turns 8 --output tmp\approx_q_smoke_policy.json
-python experiments\run_tournament.py --preset full --games-per-pair 1 --max-turns 20 --output tmp\tournament_full_after_algorithms.csv
-python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --max-turns 5 --output tmp\tournament_adversarial_after_algorithms.csv
-```
-
-结果：
-
-- `python -m compileall -q quoridor tests experiments` 通过。
-- 新增算法相关 23 个测试通过。
-- 全量单元测试 58 个通过。
-- Q-learning smoke training：3 episodes，写出 `tmp\q_learning_smoke_policy.json`。
-- Approx-Q smoke training：3 episodes，写出 `tmp\approx_q_smoke_policy.json`。
-- `full` tournament smoke 通过，写出 `tmp\tournament_full_after_algorithms.csv`。
-- `adversarial` tournament smoke 通过，写出 `tmp\tournament_adversarial_after_algorithms.csv`。
-- `research` preset 默认参数较重，`--max-turns 5` 也不适合日常 smoke；正式实验前需要先降低或拆分参数预算。
-- Web server 已重启在 `http://127.0.0.1:8766`，当前新增 agent 单步 API 粗测：
-  - `PUCT 8` avg 123.5ms, max 333.4ms。
-  - `Approx-Q` avg 14.9ms, max 28.8ms。
-  - `ArgmaxQTrap` avg 85.2ms, max 218.7ms。
 
 ## GPU 训练记录
 
@@ -169,17 +111,9 @@ python experiments\run_tournament.py --preset smoke --games-per-pair 2 --max-tur
 - matchup matrix：`--matrix-output` 输出 long-format 对阵矩阵，包含 games/wins/losses/draws/score_rate/win_rate/avg_turns/avg_trap_events/avg_wall_actions/avg_path_delta。
 - score matrix：`--score-matrix-output` 输出 wide-format 分数率矩阵，适合直接转论文表格或 heatmap。
 
-验证：
-
-- 第一次并行 smoke：`tasks=6 completed_now=6 skipped_or_existing=0 workers=2`。
-- 第二次同命令 resume：`tasks=6 completed_now=0 skipped_or_existing=6 workers=2`。
-- 已生成 `tmp\arena_smoke_games.csv`、`tmp\arena_smoke_matrix.csv`、`tmp\arena_smoke_score.csv`。
-- 全量单元测试：62 tests OK。
-
 注意：
 
 - `research` preset 含 MCTS/PUCT/CounterTrap/ArgmaxQTrap/Deep-Q，建议先用 `--workers 2` 或 `--workers 4` 试跑；Deep-Q 多进程会让每个 worker 各自加载 checkpoint，workers 过多会浪费显存。
-- 正式论文实验建议把 games CSV、matchup matrix 和 score matrix 一起保存到 `experiments\results\`，不要只保存 standings 文本输出。
 
 ## Trap Efficacy 竞技记录
 
@@ -269,24 +203,6 @@ python experiments\run_trap_targets.py --games-per-pair 20 --max-turns 100 --wor
    - Minimax victim：用浅层 `MinimaxAgent` 或 `ranked_actions` 近似。
    - MCTS victim：用小预算 MCTS 或 rollout score gap 近似。
 
-这个方向比直接上 NN/RL 更贴近 proposal 的“minimal adversarial policies”主题，也能复用当前已经验证过的 path diversity、path delta、trap transition 指标。
-
-当前实现名为 `CounterfactualTrapAgent`，并已接入：
-
-- Python agent 导出：`quoridor.agents.CounterfactualTrapAgent`
-- Web UI agent 选项：`CounterTrap`
-- CLI adversarial / research preset：`counter_trap`
-- 单元测试：`test_counterfactual_trap_returns_legal_action`
-
-初步验证：
-
-```powershell
-python -m unittest tests.test_search_agents tests.test_web_server -v
-python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --max-turns 5 --output tmp\counter_trap_adversarial_tiny.csv
-```
-
-注意：加入 `counter_trap` 后 adversarial preset 的组合数和每步计算都会增加，正式实验前需要固定参数预算。
-
 ### RL / PUCT 补齐进展
 
 本轮新增内容：
@@ -338,20 +254,6 @@ python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --m
 
 4. 如果要继续 proposal 的 NN/RL 部分，先实现 deterministic Q victim，再写 exploit wrapper。不要直接跳到复杂 NN-MCTS，否则很难和当前 minimal adversarial policy 主线对齐。
 
-5. 下一步正式实验前，先训练并冻结两个 policy 文件：
-
-   ```powershell
-   python experiments\train_q_learning.py --episodes 500 --max-turns 120 --output experiments\results\q_learning_policy.json
-   python experiments\train_approx_q.py --episodes 500 --max-turns 120 --output experiments\results\approx_q_policy.json
-   F:\Programs\PythonEnv\torch10\python.exe experiments\train_deep_q.py --episodes 500 --max-turns 120 --device cuda --output experiments\results\deep_q_policy.pt
-   ```
-
-6. 论文结果表应从固定输出生成，不手写结果：
-
-   ```powershell
-   python experiments\run_tournament.py --preset research --games-per-pair 10 --max-turns 150 --workers 4 --resume --output experiments\results\tournament_research_games.csv --matrix-output experiments\results\tournament_research_matchups.csv --score-matrix-output experiments\results\tournament_research_scores.csv
-   ```
-
 ## 交接备注
 
 - 新 agent 只需要实现 `choose_action(state, legal_actions)`。
@@ -361,10 +263,7 @@ python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --m
 
 ## 启发式增强与 AlphaZero 路线
 
-本轮针对“人类直走即可获胜”和 DepthTrap 互相横跳的问题，开始把算法分成两层：
-
-1. **强启发式搜索层**：作为当前 Web 可玩 AI、arena baseline 和未来 AlphaZero teacher。
-2. **AlphaZero-style policy/value 层**：作为最终强 AI 的训练方向。
+**AlphaZero-style policy/value ：作为最终强 AI 的训练方向。
 
 ### 已完成的启发式增强
 
@@ -446,96 +345,3 @@ python experiments\run_tournament.py --preset adversarial --games-per-pair 1 --m
 3. **Arena gating**
    - 新 checkpoint 必须在正式 arena 中击败当前 best checkpoint 和 enhanced heuristic baseline。
    - 通过后才更新 `experiments/results/alphazero_policy_value.pt`。
-
-短期不要声称已经实现“真正 AlphaZero 强度”。当前完成的是 AlphaZero-compatible inference/training interface；正式强度还取决于大规模自对弈训练和 arena gating。
-
-### AlphaZero 训练启动记录
-
-已完成一轮本地 CUDA smoke training：
-
-```powershell
-F:\Programs\PythonEnv\torch10\python.exe experiments\train_alphazero.py --games 2 --simulations 4 --max-turns 30 --hidden-size 64 --action-limit 6 --wall-limit 3 --batch-size 8 --epochs-per-game 1 --seed 0 --device cuda --output experiments\results\alphazero_policy_value.pt
-```
-
-结果：
-
-- games: 2
-- examples: 60
-- updates: 2
-- wins: `(0, 0)`
-- draws: 2
-- device: `cuda`
-- elapsed_seconds: 18.554
-
-该 checkpoint 只证明 self-play/training/checkpoint/Web 启用链路可运行，不代表已有强棋力。
-
-### 远程 AlphaZero 长训练配置
-
-已新增正式远程长训练配置：
-
-- 配置：`experiments/configs/alphazero_remote_long.json`
-- Runner：`experiments/run_alphazero_config.py`
-- 默认最终输出：`experiments/results/alphazero_policy_value.pt`
-- 分阶段 checkpoint 目录：`experiments/results/alphazero_stages/`
-
-当前配置不使用本地 2 局 smoke checkpoint 作为起点，而是从零开始训练一个干净的 256 hidden-size policy/value 网络。默认阶段：
-
-| Stage | Games | Chunk | Simulations | Max turns | Action / wall budget | Batch | Replay cap | 目的 |
-| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |
-| remote_validation | 64 | 16 | 8 | 100 | 10 / 5 | 64 | 20,000 | 验证远程 CUDA、依赖、checkpoint 恢复和吞吐。 |
-| bootstrap | 512 | 64 | 16 | 120 | 14 / 7 | 128 | 60,000 | 初步摆脱随机 policy，学习基本 race / block 模式。 |
-| policy_improvement | 4,096 | 128 | 48 | 150 | 22 / 10 | 256 | 160,000 | 形成可对抗 heuristic PUCT/MCTS 的候选策略。 |
-| champion_search | 16,384 | 256 | 96 | 170 | 30 / 14 | 512 | 320,000 | 长跑候选冠军 checkpoint。 |
-
-2026-06-26 远程早期训练观察到大量 max-turn draw，导致 value target 接近全 0。已将配置调整为 `draw_value_mode = "heuristic"`：真实胜负仍使用 `+1/-1`，但 max-turn draw 会使用当前启发式局面估值经 `tanh(score / 40.0)` 压缩后作为弱 value target；同时略微降低早期 `max_turns`，减少低信息量拖平局样本。
-
-2026-06-27 进一步观察显示 shaped self-play 虽然不再是全 0 value target，但真实胜负仍几乎全是 draw，且部分 worker 的 `value_mean_abs` 会逐步塌到接近 0。结论：继续直接长训不是优先路线。已新增 infra-first 路线：
-
-- `generate_teacher_bootstrap_examples(...)`：用多个 CPU worker 并行生成 teacher 数据。
-- teacher pool：当前强 heuristic PUCT、Minimax、MCTS、DepthTrap、CounterTrap。
-- policy target：PUCT 使用 visit-count policy；其他 teacher 使用 one-hot teacher action。
-- value target：真实胜负优先；max-turn draw 使用轻量启发式 value shaping。
-- `train_alphazero_examples(...)`：把 teacher 样本一次性/分块送入 GPU，支持 `batch_size >= 128` 的监督训练。
-- MCTS rollout value 改为 `tanh(evaluate / scale)`，避免 UCT 被未归一化启发式值支配。
-- PUCT 支持 AlphaZero 常用 root Dirichlet noise，self-play 默认启用探索噪声。
-
-新的远程 bootstrap 建议先跑：
-
-```bash
-cd /home/lc/quoridor
-CUDA_VISIBLE_DEVICES=0 .venv/bin/python experiments/train_alphazero_teacher_bootstrap.py --games 512 --max-turns 100 --workers 16 --teacher-profile mixed_strong --hidden-size 256 --batch-size 256 --epochs 4 --device cuda --output experiments/results/alphazero_teacher_bootstrap.pt
-```
-
-如果这一步能生成非零 value、较低 draw 或至少明显 teacher policy 信号，再用该 checkpoint 作为 `experiments/run_alphazero_config.py` 的 `initial_checkpoint` 进入 self-play。
-
-远程 Ubuntu 建议启动命令：
-
-```bash
-cd /path/to/Quoridor
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install torch numpy
-export PYTHONPATH="$PWD"
-python experiments/run_alphazero_config.py --config experiments/configs/alphazero_remote_long.json --resume
-```
-
-先做 dry run：
-
-```bash
-python experiments/run_alphazero_config.py --config experiments/configs/alphazero_remote_long.json --dry-run
-```
-
-如果远程 GPU/CPU 比预期慢，先只跑验证阶段：
-
-```bash
-python experiments/run_alphazero_config.py --config experiments/configs/alphazero_remote_long.json --resume --max-stages 1
-```
-
-训练晋级标准不写成“主观强”，而写成可复现实验门槛：
-
-1. 候选 checkpoint 必须先通过 `remote_validation` 并能被 Web 的 `AlphaZero` agent 加载。
-2. 候选 checkpoint 进入 arena gating，至少对 `PUCT 64`、`MCTS 64`、`DepthTrap`、`CounterTrap` 和上一版 best AlphaZero 达到配置中的 score-rate 阈值。
-3. 通过 gating 后才允许覆盖 `experiments/results/alphazero_policy_value.pt` 作为 Web 端可选强策略。
-
-注意：当前 runner 的可恢复粒度是 chunk checkpoint；中断后用 `--resume` 跳过已完成 chunk。为控制内存，self-play replay buffer 使用 `replay_capacity` 裁剪，统计中的 `examples` 是累计生成样本数，不是当前内存中保留的样本数。
